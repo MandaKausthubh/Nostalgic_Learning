@@ -9,8 +9,6 @@ def compute_Q_for_task(
     train_loader,
     device,
     k=32,
-    processor=None,
-    use_processor=False,
 ):
     """
     Computes (Q_t, Lambda_t) for a single task using Lanczos.

@@ -1,4 +1,4 @@
-./logs
-./data/
-./lightning_logs/
-./model_weights/
+logs/
+data/
+lightning_logs/
+model_weights/

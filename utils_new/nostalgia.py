@@ -17,6 +17,9 @@ class NostalgiaOptimizer(Optimizer):
         base_optimizer: Optimizer,
         device: torch.device,
         dtype: torch.dtype,
+        writter: Optional[Any] = None,
+        starting_step: int = 0,
+        log_every: int = 50,
     ):
         # Important: we do NOT pass params to super(); base_optimizer owns them
         self.base_optimizer = base_optimizer
@@ -27,6 +30,12 @@ class NostalgiaOptimizer(Optimizer):
 
         self.nostalgia_Q: Optional[torch.Tensor] = None
         self.scaling: Optional[torch.Tensor] = None
+        self.writter = writter
+
+        self.log_every = log_every
+        self.ema_beta = 0.98
+        self.proj_ratio_ema: Optional[float] = None
+        self.step_count = starting_step
 
         # Fixed parameter layout (ordering matters!)
         self.param_numels = [p.numel() for p in self.projection_params]
@@ -98,8 +107,35 @@ class NostalgiaOptimizer(Optimizer):
             projection = self.nostalgia_Q @ coeffs
 
             g_projected = g - projection
+
             self._unflatten_to_grads(g_projected)
 
+            if self.writter is not None:
+                grad_norm = torch.norm(g)
+                proj_norm = torch.norm(g_projected)
+                ratio = (proj_norm / (grad_norm + 1e-12)).item()
+
+                if self.proj_ratio_ema is None:
+                    self.proj_ratio_ema = ratio
+                else:
+                    self.proj_ratio_ema = (
+                        self.ema_beta * self.proj_ratio_ema +
+                        (1 - self.ema_beta) * ratio
+                    )
+
+                if self.step_count % self.log_every == 0:
+                    self.writter.add_scalar(
+                        'Nostalgia/Projection_Ratio',
+                        ratio,
+                        self.step_count
+                    )
+                    self.writter.add_scalar(
+                        'Nostalgia/Projection_Ratio_EMA',
+                        self.proj_ratio_ema,
+                        self.step_count
+                    )
+
+        self.step_count += 1
         return self.base_optimizer.step(closure)
 
     # ------------------------------------------------------------------

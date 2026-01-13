@@ -2,6 +2,7 @@ from typing import Dict, Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 import pytorch_lightning as pl
 
 from peft import get_peft_model, LoraConfig, get_peft_model_state_dict
@@ -254,7 +255,11 @@ class ImageClassifierViT(pl.LightningModule):
             if p.requires_grad
         ]
 
-    def configure_optimizers(self):
+    def configure_optimizers(
+            self,
+            writter: Optional[SummaryWriter] = None,
+            iteration: int = 0,
+    ):
         # Backbone params (shared, projected)
         backbone_params = self.get_backbone_params()
 
@@ -271,8 +276,18 @@ class ImageClassifierViT(pl.LightningModule):
                 {"params": head_params},
             ],
             lr=self.learning_rate,
-            weight_decay=1e-2,
+            # weight_decay=1e-2,
         )
+
+        # base_optimizer = torch.optim.SGD(
+        #     [
+        #         {"params": backbone_params},
+        #         {"params": head_params},
+        #     ],
+        #     lr=self.learning_rate,
+        #     momentum=0.9,
+        #     weight_decay=1e-3,
+        # )
 
         if not self.use_nostalgia:
             return base_optimizer
@@ -284,6 +299,8 @@ class ImageClassifierViT(pl.LightningModule):
             base_optimizer=base_optimizer,
             device=self.device,
             dtype=backbone_params[0].dtype,
+            writter=writter,
+            starting_step=iteration
         )
 
         if self.nostalgia_Q is not None:

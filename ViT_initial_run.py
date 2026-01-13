@@ -148,9 +148,10 @@ optimizerWithoutPeft = imageClassifierWithoutPeft.configure_optimizers()
 imageClassifierWithoutPeft.set_active_task('CIFAR10')
 
 # Testing a single training step without projection
-for input, target in tqdm(cifar10_train_loader):
+for input, target in tqdm(cifar10_train_loader, ncols=50):
     input, target = input.to('mps'), target.to('mps')
     optimizerWithoutPeft.zero_grad()
+    input = imageClassifierWithoutPeft.preprocess_inputs(input)
     output = imageClassifierWithoutPeft(input)
     loss = imageClassifierWithoutPeft.criterion(output, target)
     loss.backward()
@@ -160,7 +161,8 @@ for input, target in tqdm(cifar10_train_loader):
 total_loss = 0.0
 for input, target in tqdm(cifar10_val_loader):
     input, target = input.to('mps'), target.to('mps')
-    output = imageClassifierWithoutPeft.preprocess_inputs(input)
+    input = imageClassifierWithoutPeft.preprocess_inputs(input)
+    output = imageClassifierWithoutPeft(input)
     loss = imageClassifierWithoutPeft.criterion(output, target)
 
     total_loss += loss.item() * input.size(0)
@@ -171,7 +173,7 @@ print(f'[Without PEFT] CIFAR10 Validation Loss: {avg_loss}')
 # Training on CIFAR100 without PEFT
 imageClassifierWithoutPeft.set_active_task('CIFAR100')
 optimizerWithoutPeft = imageClassifierWithoutPeft.configure_optimizers()
-for input, target in tqdm(cifar100_train_loader):
+for input, target in tqdm(cifar100_train_loader, ncols=50):
     input, target = input.to('mps'), target.to('mps')
     optimizerWithoutPeft.zero_grad()
     input = imageClassifierWithoutPeft.preprocess_inputs(input)
@@ -183,8 +185,9 @@ for input, target in tqdm(cifar100_train_loader):
 # Validation for CIFAR10 without PEFT after training on CIFAR100
 imageClassifierWithoutPeft.set_active_task('CIFAR10')
 total_loss = 0.0
-for input, target in tqdm(cifar10_val_loader):
+for input, target in tqdm(cifar10_val_loader, ncols=50):
     input, target = input.to('mps'), target.to('mps')
+    input = imageClassifierWithoutPeft.preprocess_inputs(input)
     output = imageClassifierWithoutPeft(input)
     loss = imageClassifierWithoutPeft.criterion(output, target)
 
