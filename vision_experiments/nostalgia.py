@@ -25,7 +25,7 @@ def get_args():
     parser.add_argument('--learning_rate', type=float, default=5e-4, help='Learning rate for optimizer')
     parser.add_argument('--device', type=str, default='mps', help='Device to use for training (e.g., cpu, cuda, mps)',
                         choices=['cpu', 'cuda', 'mps'])
-    parser.add_argument('--hessian_eigenspace_dim', type=int, default=8, help='Dimension of Hessian eigenspace')
+    parser.add_argument('--hessian_eigenspace_dim', type=int, default=32, help='Dimension of Hessian eigenspace')
     parser.add_argument('--validate_after_steps', type=int, default=100, help='Validation frequency in steps')
     parser.add_argument('--log_dir', type=str,
                         default=f'./logs/nostalgia_vision_experiment/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}',
@@ -99,24 +99,35 @@ class NostalgiaExperiment:
         self.writer = SummaryWriter(log_dir=self.config.log_dir)
         self.finished_datasets = []
 
-        self.ewc_fisher: Dict[str, Dict[str, torch.Tensor]] = {}
-        self.ewc_params: Dict[str, Dict[str, torch.Tensor]] = {}
+        self.ewc_fisher: Dict[str, torch.Tensor] = {}
+        self.ewc_params: Dict[str, torch.Tensor] = {}
 
 
     def store_ewc_information(
         self,
-        task_name: str,
         fisher_information: Dict[str, torch.Tensor],
+        alpha: float = 0.9,
     ):
-        self.ewc_fisher[task_name] = {
-            k: v.detach().clone() for k, v in fisher_information.items()
-        }
+        # First task:
+        if len(self.ewc_fisher) == 0:
+            self.ewc_fisher = {
+                k: v.detach().clone() 
+                for k, v in fisher_information.items()
+            }
+        else:
+            for k, v in fisher_information.items():
+                if k in self.ewc_fisher:
+                    self.ewc_fisher[k] = (
+                        alpha * self.ewc_fisher[k] + (1 - alpha) * v.detach().clone()
+                    )
+                else:
+                    self.ewc_fisher[k] = v.detach().clone()
 
-        self.ewc_params[task_name] = {
-            name: p.detach().clone() for name, p in self.imageClassifier.backbone.named_parameters()
+        self.ewc_params = {
+            name: p.detach().clone() 
+            for name, p in self.imageClassifier.backbone.named_parameters()
             if p.requires_grad
         }
-
 
 
 
@@ -169,14 +180,11 @@ class NostalgiaExperiment:
 
         loss = torch.tensor(0.0, device=self.config.device)
 
-        for task_name in self.ewc_fisher.keys():
-            fisher = self.ewc_fisher[task_name]
-            theta_star = self.ewc_params[task_name]
+        for name, param in self.imageClassifier.backbone.named_parameters():
+            if name in self.ewc_fisher:
+                loss += self.ewc_fisher[name] * (param - self.ewc_params[name]).pow(2).sum()
 
-            for name, param in self.imageClassifier.backbone.named_parameters():
-                if name in fisher:
-                    loss += torch.sum(fisher[name] * (param - theta_star[name]).pow(2))
-        return lambda_ewc * loss
+        return (lambda_ewc/2) * loss
 
 
 
@@ -370,9 +378,6 @@ class NostalgiaExperiment:
         if erase_past:
             self.finished_datasets = []
 
-
-
-
         for task_name in self.order_of_tasks:
             self.finished_datasets.append(task_name)
 
@@ -392,7 +397,7 @@ class NostalgiaExperiment:
 
             if self.config.mode == "EWC":
                 fisher_information = self.imageClassifier.get_fisher_information(dataloader=train_loader)
-                self.store_ewc_information(task_name, fisher_information)
+                self.store_ewc_information(fisher_information)
 
             print(f"Immediately after training on {task_name}, total steps: {total_steps}")
 

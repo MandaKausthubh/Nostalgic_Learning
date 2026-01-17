@@ -13,55 +13,6 @@ from transformers import AutoModel, AutoConfig, AutoProcessor
 
 
 
-
-class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1):
-        super(ResidualBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
-        self.bn1 = nn.BatchNorm2d(out_channels)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        self.bn2 = nn.BatchNorm2d(out_channels)
-
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_channels != out_channels:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride),
-                nn.BatchNorm2d(out_channels)
-            )
-
-    def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
-
-
-class SimpleResNet(nn.Module):
-    def __init__(self, num_classes=10):
-        super(SimpleResNet, self).__init__()
-        self.layer1 = self._make_layer(3, 64, stride=1)
-        self.layer2 = self._make_layer(64, 128, stride=2)
-        self.layer3 = self._make_layer(128, 256, stride=2)
-        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(256, num_classes)
-
-    def _make_layer(self, in_channels, out_channels, stride):
-        return ResidualBlock(in_channels, out_channels, stride)
-
-    def forward(self, input_ids, *args, **kwargs):
-        out = self.layer1(input_ids)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.avg_pool(out)
-        out = out.view(out.size(0), -1)
-        out = self.fc(out)
-        return out
-
-
-
-
-
 class ViTClassifier(nn.Module):
     def __init__(self):
         super(ViTClassifier, self).__init__()
@@ -75,12 +26,6 @@ class ViTClassifier(nn.Module):
         outputs = self.vit(pixel_values=pixel_values)
         cls_representation = outputs.last_hidden_state[:, 0, :]
         return cls_representation
-
-
-
-
-
-
 
 
 
@@ -318,7 +263,7 @@ class ImageClassifierViT(pl.LightningModule):
     def l2sp_regularization(self, model_before: Dict[str, torch.Tensor], lambda_l2sp: float):
         l2sp_loss = 0.0
         for name, param in self.backbone.named_parameters():
-            if name in model_before:
+            if name in model_before and param.requires_grad:
                 l2sp_loss += torch.sum((param - model_before[name].to(param.device)) ** 2)
         l2sp_loss = lambda_l2sp * l2sp_loss
         return l2sp_loss
@@ -332,7 +277,14 @@ class ImageClassifierViT(pl.LightningModule):
             self.zero_grad()
             inputs = self.preprocess_inputs(inputs)
             logits = self.forward(inputs)
-            loss = self.criterion(logits, targets)
+            # loss = self.criterion(logits, targets)
+            # loss.backward()
+
+            with torch.no_grad():
+                probs = F.softmax(logits, dim=1)
+                sampled_classes = torch.multinomial(probs, num_samples=1).squeeze()
+
+            loss = F.nll_loss(F.log_softmax(logits, dim=1), sampled_classes)
             loss.backward()
 
             for name, param in self.backbone.named_parameters():
@@ -343,9 +295,9 @@ class ImageClassifierViT(pl.LightningModule):
                         fisher_information[name] += param.grad.data.clone().pow(2)
 
         # Average the Fisher Information
-        num_samples = len(dataloader.dataset) #type: ignore
+        num_batches = len(dataloader) #type: ignore
         for name in fisher_information:
-            fisher_information[name] /= num_samples
+            fisher_information[name] /= num_batches
 
         return fisher_information
 

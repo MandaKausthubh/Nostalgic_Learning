@@ -21,6 +21,7 @@ class NostalgiaOptimizer(Optimizer):
         starting_step: int = 0,
         log_every: int = 50,
     ):
+        super().__init__(params, {})  # Dummy call to satisfy Optimizer base class
         # Important: we do NOT pass params to super(); base_optimizer owns them
         self.base_optimizer = base_optimizer
 
