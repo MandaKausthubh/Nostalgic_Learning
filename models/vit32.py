@@ -179,6 +179,7 @@ class ImageClassifierViT(pl.LightningModule):
     # -------------------------------------------------------
     def training_step(self, batch, _):
         inputs, targets = batch
+        inputs = self.preprocess_inputs(inputs)
         logits = self(inputs)
         loss = self.criterion(logits, targets)
         logging_dict = {"current_loss": loss.item()}

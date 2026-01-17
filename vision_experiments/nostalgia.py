@@ -35,6 +35,9 @@ def get_args():
     parser.add_argument('--lora_dropout', type=float, default=0.1, help='LoRA dropout rate')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--nostalgia_dimension', type=int, default=16, help='Dimension of Hessian low-rank for nostalgia method')
+    parser.add_argument('--ewc_lambda', type=float, default=1e-3, help='EWC regularization strength')
+    parser.add_argument('--l2sp_lambda', type=float, default=1e-4, help='L2-SP regularization strength')
+    parser.add_argument('--reset_lora', type=bool, default=True, help='Whether to reset LoRA parameters before training each task')
     return parser.parse_args()
 
 
@@ -58,6 +61,10 @@ class NostalgiaConfig:
     lora_alpha: int = 16
     lora_dropout: float = 0.1
     lora_modules: Optional[list] = None
+
+    ewc_lambda: float = 1e-4
+    l2sp_lambda: float = 1e-4
+    reset_lora: bool = True
 
 
 
@@ -153,8 +160,6 @@ class NostalgiaExperiment:
     def save_model(self, path: str):
         torch.save(self.imageClassifier.state_dict(), path)
 
-
-
     def prepare_dataloader(self, dataset_class, train: bool = True):
         dataset = dataset_class(
             root=self.config.root_dir,
@@ -169,12 +174,11 @@ class NostalgiaExperiment:
         )
         return dataloader
 
-
-
     def EWC_regularization(
         self,
-        lambda_ewc: float = 1e-4,
+        lambda_ewc = None,
     ):
+        lambda_ewc = lambda_ewc if lambda_ewc is not None else self.config.ewc_lambda
         if not self.ewc_fisher:
             return torch.tensor(0.0, device=self.config.device)
 
@@ -324,10 +328,7 @@ class NostalgiaExperiment:
                 loss = criterion(output, target)
 
                 if mode == "l2sp":
-                    loss += self.imageClassifier.l2sp_regularization(self.theta_0, lambda_l2sp=1e-4) #type: ignore
-
-                elif mode == "EWC":
-                    loss += self.EWC_regularization(lambda_ewc=1e-3)
+                    loss += self.imageClassifier.l2sp_regularization(self.theta_0, lambda_l2sp=self.config.l2sp_lambda)
 
                 loss.backward()
                 optimizer.step()
@@ -416,9 +417,9 @@ class NostalgiaExperiment:
                     t=task_counter, k=self.config.hessian_eigenspace_dim
                 )
 
-                self.imageClassifier._merge_and_unload_peft()
-                self.imageClassifier._apply_peft()
-
+                if self.config.reset_lora:
+                    self.imageClassifier._merge_and_unload_peft()
+                    self.imageClassifier._apply_peft()
 
             # Save model after each task
             self.save_model(f'./model_weights/nostalgia_model_after_{task_name}.pth')
@@ -450,6 +451,9 @@ if __name__ == "__main__":
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
         seed=args.seed,
+        ewc_lambda=args.ewc_lambda,
+        l2sp_lambda=args.l2sp_lambda,
+        reset_lora=args.reset_lora,
     )
 
     experiment = NostalgiaExperiment(config)
