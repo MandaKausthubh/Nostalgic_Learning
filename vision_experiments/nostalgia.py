@@ -450,3 +450,7 @@ if __name__ == "__main__":
     experiment = NostalgiaExperiment(config)
     experiment.load_model()  # Load pre-trained model if available
     experiment.train()
+
+    # Testing merge and unload/apply PEFT
+    # experiment.imageClassifier._merge_and_unload_peft()
+    # experiment.imageClassifier._apply_peft()

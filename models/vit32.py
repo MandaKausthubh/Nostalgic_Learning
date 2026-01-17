@@ -148,6 +148,11 @@ class ImageClassifierViT(pl.LightningModule):
     def _merge_and_unload_peft(self):
         if self.is_peft_on:
             self.backbone = self.backbone.merge_and_unload() #type: ignore
+
+            if hasattr(self.backbone, "peft_config"):
+                print("Deleting peft_config attribute...")
+                delattr(self.backbone, "peft_config")
+
             self.is_peft_on = False
 
 
