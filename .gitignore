@@ -2,3 +2,5 @@ logs/
 data/
 lightning_logs/
 model_weights/
+__pycache__/
+vision_experiments/__pycache__/

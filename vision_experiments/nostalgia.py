@@ -18,14 +18,14 @@ import argparse
 
 def get_args():
     parser = argparse.ArgumentParser(description="Nostalgia Vision Experiment")
-    parser.add_argument('--mode', type=str, default='nostalgia', help='Training mode: nostalgia, l2sp, EWC',
+    parser.add_argument('--mode', type=str, default='nostalgia', help='Training mode: nostalgia, l2sp, EWC, Adam',
                         choices=['nostalgia', 'l2sp', 'EWC', 'Adam'])
     parser.add_argument('--root_dir', type=str, default='/Users/mandakausthubh/data', help='Root directory for datasets')
-    parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
-    parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate for optimizer')
+    parser.add_argument('--batch_size', type=int, default=128, help='Batch size for training')
+    parser.add_argument('--learning_rate', type=float, default=5e-4, help='Learning rate for optimizer')
     parser.add_argument('--device', type=str, default='mps', help='Device to use for training (e.g., cpu, cuda, mps)',
                         choices=['cpu', 'cuda', 'mps'])
-    parser.add_argument('--hessian_eigenspace_dim', type=int, default=16, help='Dimension of Hessian eigenspace')
+    parser.add_argument('--hessian_eigenspace_dim', type=int, default=8, help='Dimension of Hessian eigenspace')
     parser.add_argument('--validate_after_steps', type=int, default=100, help='Validation frequency in steps')
     parser.add_argument('--log_dir', type=str,
                         default=f'./logs/nostalgia_vision_experiment/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}',
@@ -67,15 +67,26 @@ class NostalgiaExperiment:
 
         torch.manual_seed(self.config.seed)
 
+        # self.transform = transforms.Compose([
+        #     transforms.Resize(72),
+        #     transforms.Grayscale(num_output_channels=3),
+        #     transforms.RandomCrop(64, padding=4),
+        #     transforms.RandomHorizontalFlip(),
+        #     transforms.RandAugment(num_ops=2, magnitude=9),
+        #     transforms.ToTensor(),
+        #     transforms.Normalize([0.5]*3, [0.5]*3),
+        # ])
+
         self.transform = transforms.Compose([
-            transforms.Resize(72),
-            transforms.Grayscale(num_output_channels=3),
-            transforms.RandomCrop(64, padding=4),
+            transforms.Resize(224),
+            transforms.RandomCrop(224, padding=16),
             transforms.RandomHorizontalFlip(),
-            transforms.RandAugment(num_ops=2, magnitude=9),
             transforms.ToTensor(),
             transforms.Normalize([0.5]*3, [0.5]*3),
         ])
+
+
+        using_nostalgia = (self.config.mode == "nostalgia")
 
         self.imageClassifier = ImageClassifierViT(
             learning_rate=self.config.learning_rate,
@@ -83,6 +94,7 @@ class NostalgiaExperiment:
             lora_alpha=self.config.lora_alpha,
             lora_dropout=self.config.lora_dropout,
             lora_modules=self.config.lora_modules,
+            use_nostalgia=using_nostalgia,
         ).to(self.config.device)
         self.writer = SummaryWriter(log_dir=self.config.log_dir)
         self.finished_datasets = []
@@ -121,6 +133,11 @@ class NostalgiaExperiment:
                 './model_weights/nostalgia_model_pretrained.pth'
             )
 
+        self.theta_0 = {
+            name: p.detach().clone() for name, p in self.imageClassifier.backbone.named_parameters()
+            if p.requires_grad
+        }
+
 
     def save_model(self, path: str):
         torch.save(self.imageClassifier.state_dict(), path)
@@ -140,6 +157,26 @@ class NostalgiaExperiment:
             shuffle=train
         )
         return dataloader
+
+
+
+    def EWC_regularization(
+        self,
+        lambda_ewc: float = 1e-4,
+    ):
+        if not self.ewc_fisher:
+            return torch.tensor(0.0, device=self.config.device)
+
+        loss = torch.tensor(0.0, device=self.config.device)
+
+        for task_name in self.ewc_fisher.keys():
+            fisher = self.ewc_fisher[task_name]
+            theta_star = self.ewc_params[task_name]
+
+            for name, param in self.imageClassifier.backbone.named_parameters():
+                if name in fisher:
+                    loss += torch.sum(fisher[name] * (param - theta_star[name]).pow(2))
+        return lambda_ewc * loss
 
 
 
@@ -165,8 +202,13 @@ class NostalgiaExperiment:
         stl10_val_loader = DataLoader(stl10_val_dataset, batch_size=batch_size, shuffle=False)
 
         # Caltech-256 datasets
-        caltech256_train_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
-        caltech256_val_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
+        caltech256_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
+        total_size = len(caltech256_dataset)
+        train_size = int(0.9 * total_size)
+        val_size = total_size - train_size
+        caltech256_train_dataset, caltech256_val_dataset = torch.utils.data.random_split(caltech256_dataset, [train_size, val_size])
+        # caltech256_train_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
+        # caltech256_val_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
         caltech256_train_loader = DataLoader(caltech256_train_dataset, batch_size=batch_size, shuffle=True)
         caltech256_val_loader = DataLoader(caltech256_val_dataset, batch_size=batch_size, shuffle=False)
 
@@ -198,31 +240,13 @@ class NostalgiaExperiment:
             self.imageClassifier.add_task(task_name, self.dataset_num_classes[task_name])
 
         self.epochs_per_task = {
-            'CIFAR10': 1,
-            'CIFAR100': 1,
-            'STL10': 1,
-            'Caltech256': 1,
-            'TinyImageNet': 1,
+            'CIFAR10': 30,
+            'CIFAR100': 30,
+            'STL10': 30,
+            'Caltech256': 30,
+            'TinyImageNet': 30,
         }
 
-
-    def ewc_regularization(
-        self,
-        lambda_ewc: float = 1e-4,
-    ):
-        if not self.ewc_fisher:
-            return 0.0
-
-        loss = 0.0
-        for task_name in self.ewc_fisher.keys():
-            fisher_information = self.ewc_fisher[task_name]
-            params = self.ewc_params[task_name]
-
-            for name, p in self.imageClassifier.backbone.named_parameters():
-                if name in fisher_information:
-                    loss += torch.sum(fisher_information[name] * (p - params[name]).pow(2))
-
-        return lambda_ewc * loss
 
 
 
@@ -261,8 +285,6 @@ class NostalgiaExperiment:
             epochs: int = 1,
             log_deltas: bool = False,
             mode="nostalgia",
-            prev_model_path: Optional[str] = None,
-            fisher_information = None,
         ):
 
         train_loader, _ = self.datasets[task_name]
@@ -294,34 +316,10 @@ class NostalgiaExperiment:
                 loss = criterion(output, target)
 
                 if mode == "l2sp":
-                    print("Applying L2-SP regularization.")
-
-                    if prev_model_path is None:
-                        loss += 0.0
-                        print("No previous model path provided; skipping L2-SP regularization.")
-                    else:
-                        prev_model = ImageClassifierViT.load_from_checkpoint(
-                            checkpoint_path=prev_model_path,
-                            task_name=task_name
-                        ).to(self.config.device)
-                        loss += self.imageClassifier.l2sp_regularization(prev_model, lambda_l2sp=1e-4)
+                    loss += self.imageClassifier.l2sp_regularization(self.theta_0, lambda_l2sp=1e-4) #type: ignore
 
                 elif mode == "EWC":
-                    print("Applying EWC regularization.")
-
-                    if prev_model_path is None:
-                        loss += 0.0
-                        print("No previous model path provided; skipping EWC regularization.")
-                    else:
-                        prev_model= ImageClassifierViT.load_from_checkpoint(
-                            checkpoint_path=prev_model_path,
-                            task_name=task_name
-                        ).to(self.config.device)
-                        loss += self.imageClassifier.EWC_regularization(
-                            model_before=prev_model,
-                            fisher_information=fisher_information,
-                            lambda_ewc=1e-3
-                        )
+                    loss += self.EWC_regularization(lambda_ewc=1e-3)
 
                 loss.backward()
                 optimizer.step()
@@ -372,7 +370,8 @@ class NostalgiaExperiment:
         if erase_past:
             self.finished_datasets = []
 
-        fisher_information = None
+
+
 
         for task_name in self.order_of_tasks:
             self.finished_datasets.append(task_name)
@@ -389,27 +388,31 @@ class NostalgiaExperiment:
                 epochs=epochs,
                 log_deltas=log_deltas,
                 mode=self.config.mode,
-                prev_model_path=f'./model_weights/nostalgia_model_pretrained.pth' if task_counter > 1 else None,
-                fisher_information=fisher_information,
             )
 
-            fisher_information = self.imageClassifier.get_fisher_information(dataloader=train_loader)
+            if self.config.mode == "EWC":
+                fisher_information = self.imageClassifier.get_fisher_information(dataloader=train_loader)
+                self.store_ewc_information(task_name, fisher_information)
 
             print(f"Immediately after training on {task_name}, total steps: {total_steps}")
 
-            # After training on the current task, compute the Hessian eigenspace
-            Q_curr, Lambda_curr = compute_Q_for_task(
-                model=self.imageClassifier,
-                train_loader=train_loader,
-                device=self.config.device,
-                k=self.config.hessian_eigenspace_dim
-            )
+            if self.config.mode == "nostalgia":
+                # After training on the current task, compute the Hessian eigenspace
+                Q_curr, Lambda_curr = compute_Q_for_task(
+                    model=self.imageClassifier,
+                    train_loader=train_loader,
+                    device=self.config.device,
+                    k=self.config.hessian_eigenspace_dim
+                )
 
-            Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
-                Q_prev, Lambda_prev,
-                Q_curr, Lambda_curr,
-                t=task_counter, k=self.config.hessian_eigenspace_dim
-            )
+                Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
+                    Q_prev, Lambda_prev,
+                    Q_curr, Lambda_curr,
+                    t=task_counter, k=self.config.hessian_eigenspace_dim
+                )
+
+                self.imageClassifier._merge_and_unload_peft()
+                self.imageClassifier._apply_peft()
 
 
             # Save model after each task

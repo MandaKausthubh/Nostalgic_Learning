@@ -310,19 +310,13 @@ class ImageClassifierViT(pl.LightningModule):
 
 
     # -------------------------------------------------------
-    def l2sp_regularization(self, model_before: nn.Module, lambda_l2sp: float):
+    def l2sp_regularization(self, model_before: Dict[str, torch.Tensor], lambda_l2sp: float):
         l2sp_loss = 0.0
-        for param_current, param_before in zip(self.backbone.parameters(), model_before.parameters()):
-            l2sp_loss += torch.sum((param_current - param_before) ** 2)
-        return lambda_l2sp * l2sp_loss
-
-    def EWC_regularization(self, model_before: nn.Module, fisher_information: Dict[str, torch.Tensor], lambda_ewc: float):
-        ewc_loss = 0.0
-        for (name, param_current), (_, param_before) in zip(self.backbone.named_parameters(), model_before.named_parameters()):
-            if name in fisher_information:
-                fisher = fisher_information[name]
-                ewc_loss += torch.sum(fisher * (param_current - param_before) ** 2)
-        return lambda_ewc * ewc_loss
+        for name, param in self.backbone.named_parameters():
+            if name in model_before:
+                l2sp_loss += torch.sum((param - model_before[name].to(param.device)) ** 2)
+        l2sp_loss = lambda_l2sp * l2sp_loss
+        return l2sp_loss
 
     def get_fisher_information(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, torch.Tensor]:
         fisher_information = {}
@@ -331,6 +325,7 @@ class ImageClassifierViT(pl.LightningModule):
         for inputs, targets in dataloader:
             inputs, targets = inputs.to(self.device), targets.to(self.device)
             self.zero_grad()
+            inputs = self.preprocess_inputs(inputs)
             logits = self.forward(inputs)
             loss = self.criterion(logits, targets)
             loss.backward()
@@ -348,5 +343,6 @@ class ImageClassifierViT(pl.LightningModule):
             fisher_information[name] /= num_samples
 
         return fisher_information
+
 
 
