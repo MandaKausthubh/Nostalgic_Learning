@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict
 
 from utils_new.accumulate import accumulate_hessian_eigenspace
+from utils_new.ortho_accumulate import update_Q_lambda_union
 from utils_new.hessian import compute_Q_for_task
 
 from models.vit32 import ImageClassifierViT
@@ -38,6 +39,11 @@ def get_args():
     parser.add_argument('--ewc_lambda', type=float, default=1e-3, help='EWC regularization strength')
     parser.add_argument('--l2sp_lambda', type=float, default=1e-4, help='L2-SP regularization strength')
     parser.add_argument('--reset_lora', type=bool, default=True, help='Whether to reset LoRA parameters before training each task')
+    parser.add_argument('--accumulate_mode', type=str, default='accumulate', help='Mode for accumulating Hessian eigenspaces',
+                        choices=['accumulate', 'union'])
+    parser.add_argument('--log_deltas', type=bool, default=True, help='Whether to log parameter deltas during training')
+    parser.add_argument('--use_scaling', type=bool, default=True, help='Whether to use scaling for Hessian eigenspace')
+    parser.add_argument('--adapt_downstream_tasks', type=bool, default=False, help='Whether to adapt downstream tasks using nostalgia method')
     return parser.parse_args()
 
 
@@ -54,6 +60,7 @@ class NostalgiaConfig:
     device: str = 'mps'
     log_dir: str = f'./logs/nostalgia_vision_experiment/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
     validate_after_steps: int = 10
+    log_deltas: bool = True
 
     hessian_eigenspace_dim: int = 16
 
@@ -65,6 +72,10 @@ class NostalgiaConfig:
     ewc_lambda: float = 1e-4
     l2sp_lambda: float = 1e-4
     reset_lora: bool = True
+
+    accumulate_mode: str = 'accumulate'  # or 'union'
+    use_scaling: bool = True
+    adapt_downstream_tasks: bool = False
 
 
 
@@ -86,6 +97,7 @@ class NostalgiaExperiment:
 
         self.transform = transforms.Compose([
             transforms.Resize(224),
+            transforms.Grayscale(num_output_channels=3),
             transforms.RandomCrop(224, padding=16),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -259,7 +271,40 @@ class NostalgiaExperiment:
             'TinyImageNet': 30,
         }
 
+    def retrain_task_head(
+        self,
+        task_name: str,
+        epochs: int = 5,
+    ):
+        train_loader, val_loader = self.datasets[task_name]
+        self.imageClassifier.set_active_task(task_name)
+        criterion = self.imageClassifier.criterion
 
+        # Freeze all parameters except task head
+        for param in self.imageClassifier.backbone.parameters():
+            param.requires_grad = False
+
+        self.imageClassifier.task_head_list[task_name].train()
+
+        optimizer = torch.optim.Adam(
+            self.imageClassifier.task_head_list[task_name].parameters(),
+            lr=self.config.learning_rate
+        )
+
+        for epoch in range(epochs):
+            for input, target in train_loader:
+                self.imageClassifier.train()
+                input, target = input.to(self.config.device), target.to(self.config.device)
+                input = self.imageClassifier.preprocess_inputs(input)
+
+                optimizer.zero_grad()
+                output = self.imageClassifier(input)
+                loss = criterion(output, target)
+                loss.backward()
+                optimizer.step()
+
+            # Validate after each epoch
+            self.validate_dataset(val_loader, criterion, iteration=epoch, task_name=task_name)
 
 
     def validate_dataset(
@@ -270,6 +315,12 @@ class NostalgiaExperiment:
             task_name: Optional[str] = None
     ):
         self.imageClassifier.set_active_task(task_name)
+
+        if self.config.adapt_downstream_tasks and task_name not in self.finished_datasets:
+            print(f"Retraining task head for {task_name} before validation.")
+            assert task_name is not None, "Task name must be provided for retraining task head."
+            self.retrain_task_head(task_name, epochs=5)
+
         total_loss = 0.0
         accuracy = 0.0
         for input, target in val_loader:
@@ -293,6 +344,7 @@ class NostalgiaExperiment:
             self,
             task_name:str,
             Q_prev = None,
+            scaling = None,
             starting_step:int=0,
             epochs: int = 1,
             log_deltas: bool = False,
@@ -303,7 +355,7 @@ class NostalgiaExperiment:
 
         self.imageClassifier.set_active_task(task_name)
 
-        self.imageClassifier.set_Q(Q_prev)
+        self.imageClassifier.set_Q(Q_prev, scaling)
         criterion = self.imageClassifier.criterion
         niter = starting_step
 
@@ -368,7 +420,7 @@ class NostalgiaExperiment:
             self.validate_dataset(val_loader, criterion, iteration, task_name)
 
 
-    def train(self, erase_past=False, log_deltas=True):
+    def train(self, erase_past=False):
         self.prepare_all_datasets()
 
         Q_prev, Lambda_prev = None, None
@@ -390,9 +442,10 @@ class NostalgiaExperiment:
             total_steps = self.train_dataset(
                 task_name=task_name,
                 Q_prev=Q_prev,
+                scaling=Lambda_prev if self.config.use_scaling else None,
                 starting_step=total_steps,
                 epochs=epochs,
-                log_deltas=log_deltas,
+                log_deltas=self.config.log_deltas,
                 mode=self.config.mode,
             )
 
@@ -411,11 +464,21 @@ class NostalgiaExperiment:
                     k=self.config.hessian_eigenspace_dim
                 )
 
-                Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
-                    Q_prev, Lambda_prev,
-                    Q_curr, Lambda_curr,
-                    t=task_counter, k=self.config.hessian_eigenspace_dim
-                )
+                if self.config.accumulate_mode == 'union':
+                    print("Updating Hessian eigenspace using union method.")
+                    Q_prev, Lambda_prev = update_Q_lambda_union(
+                        Q_prev, Lambda_prev,
+                        Q_curr, Lambda_curr,
+                        k_max=self.config.hessian_eigenspace_dim * 20
+                    )
+                elif self.config.accumulate_mode == 'accumulate':
+                    Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
+                        Q_prev, Lambda_prev,
+                        Q_curr, Lambda_curr,
+                        t=task_counter, k=self.config.hessian_eigenspace_dim
+                    )
+                else:
+                    raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
 
                 if self.config.reset_lora:
                     self.imageClassifier._merge_and_unload_peft()
@@ -454,6 +517,10 @@ if __name__ == "__main__":
         ewc_lambda=args.ewc_lambda,
         l2sp_lambda=args.l2sp_lambda,
         reset_lora=args.reset_lora,
+        accumulate_mode=args.accumulate_mode,
+        log_deltas=args.log_deltas,
+        use_scaling=args.use_scaling,
+        adapt_downstream_tasks=args.adapt_downstream_tasks,
     )
 
     experiment = NostalgiaExperiment(config)

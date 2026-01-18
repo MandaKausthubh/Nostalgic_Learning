@@ -20,6 +20,7 @@ class NostalgiaOptimizer(Optimizer):
         writter: Optional[Any] = None,
         starting_step: int = 0,
         log_every: int = 50,
+        c_scaling: float = 1e-6
     ):
         super().__init__(params, {})  # Dummy call to satisfy Optimizer base class
         # Important: we do NOT pass params to super(); base_optimizer owns them
@@ -41,8 +42,16 @@ class NostalgiaOptimizer(Optimizer):
         # Fixed parameter layout (ordering matters!)
         self.param_numels = [p.numel() for p in self.projection_params]
         self.num_params = sum(self.param_numels)
+        self.k_max: Optional[int] = None
+        self.c_scaling = c_scaling
+
+        # New list of hessian eigenvectors and eigenvalues
+        # self.nostalgia_Q: List[torch.Tensor] = []
+        # self.scaling: List[Optional[torch.Tensor]] = []
 
     # ------------------------------------------------------------------
+
+    @torch.no_grad()
     def set_Q(self, Q: torch.Tensor, scaling: Optional[torch.Tensor] = None):
         """
         Q: [num_params, k] matrix of eigenvectors
@@ -53,9 +62,11 @@ class NostalgiaOptimizer(Optimizer):
                 f"Q has {Q.shape[0]} rows, expected {self.num_params} "
                 f"(sum of projection parameter sizes)."
             )
-
         self.nostalgia_Q = Q.to(self.device, self.dtype)
-        self.scaling = scaling.to(self.device, self.dtype) if scaling is not None else None
+        if scaling is not None:
+            self.scaling = scaling.to(self.device, self.dtype)
+        else:
+            self.scaling = None
 
     # ------------------------------------------------------------------
     def _flatten_grads(self) -> torch.Tensor:
@@ -90,7 +101,6 @@ class NostalgiaOptimizer(Optimizer):
     # ------------------------------------------------------------------
     @torch.no_grad()
     def step(self, closure: Optional[Any] = None): #type: ignore
-
         if self.nostalgia_Q is not None:
             g = self._flatten_grads()
 
@@ -114,7 +124,7 @@ class NostalgiaOptimizer(Optimizer):
             if self.writter is not None:
                 grad_norm = torch.norm(g)
                 proj_norm = torch.norm(g_projected)
-                ratio = (proj_norm / (grad_norm + 1e-12)).item()
+                ratio = (proj_norm / (grad_norm + self.c_scaling)).item()
 
                 if self.proj_ratio_ema is None:
                     self.proj_ratio_ema = ratio
