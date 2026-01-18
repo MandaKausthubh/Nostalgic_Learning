@@ -39,7 +39,7 @@ def get_args():
     parser.add_argument('--ewc_lambda', type=float, default=1e-3, help='EWC regularization strength')
     parser.add_argument('--l2sp_lambda', type=float, default=1e-4, help='L2-SP regularization strength')
     parser.add_argument('--reset_lora', type=bool, default=True, help='Whether to reset LoRA parameters before training each task')
-    parser.add_argument('--accumulate_mode', type=str, default='accumulate', help='Mode for accumulating Hessian eigenspaces',
+    parser.add_argument('--accumulate_mode', type=str, default='union', help='Mode for accumulating Hessian eigenspaces',
                         choices=['accumulate', 'union'])
     parser.add_argument('--log_deltas', type=bool, default=True, help='Whether to log parameter deltas during training')
     parser.add_argument('--use_scaling', type=bool, default=True, help='Whether to use scaling for Hessian eigenspace')
@@ -58,7 +58,6 @@ class NostalgiaConfig:
     batch_size: int = 64
     learning_rate: float = 1e-4
     device: str = 'mps'
-    log_dir: str = f'./logs/nostalgia_vision_experiment/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
     validate_after_steps: int = 10
     log_deltas: bool = True
 
@@ -76,6 +75,7 @@ class NostalgiaConfig:
     accumulate_mode: str = 'accumulate'  # or 'union'
     use_scaling: bool = True
     adapt_downstream_tasks: bool = False
+    log_dir: str = f'./logs/nostalgia_vision_experiment/{mode}/{learning_rate}/{lora_r}/{hessian_eigenspace_dim}/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
 
 
 
