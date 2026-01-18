@@ -369,8 +369,8 @@ class NostalgiaExperiment:
             optimizer = self.imageClassifier.configure_optimizers()
 
 
-        for _ in range(epochs):
-            for input, target in tqdm((train_loader), desc=f"Training on {task_name}", ncols=80):
+        for epoch in range(epochs):
+            for input, target in tqdm((train_loader), desc=f"{epoch}. Training on {task_name}", ncols=80):
                 self.imageClassifier.train()
                 input, target = input.to(self.config.device), target.to(self.config.device)
                 input = self.imageClassifier.preprocess_inputs(input)
