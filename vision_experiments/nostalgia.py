@@ -16,6 +16,16 @@ from torch.utils.tensorboard import SummaryWriter
 import argparse
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', '1'):
+        return True
+    if v.lower() in ('no', 'false', 'f', '0'):
+        return False
+    raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 
 def get_args():
     parser = argparse.ArgumentParser(description="Nostalgia Vision Experiment")
@@ -38,12 +48,12 @@ def get_args():
     parser.add_argument('--nostalgia_dimension', type=int, default=16, help='Dimension of Hessian low-rank for nostalgia method')
     parser.add_argument('--ewc_lambda', type=float, default=1e-3, help='EWC regularization strength')
     parser.add_argument('--l2sp_lambda', type=float, default=1e-4, help='L2-SP regularization strength')
-    parser.add_argument('--reset_lora', type=bool, default=False, help='Whether to reset LoRA parameters before training each task')
+    parser.add_argument('--reset_lora', type=str2bool, default=False, help='Whether to reset LoRA parameters before training each task')
     parser.add_argument('--accumulate_mode', type=str, default='union', help='Mode for accumulating Hessian eigenspaces',
                         choices=['accumulate', 'union'])
-    parser.add_argument('--log_deltas', type=bool, default=True, help='Whether to log parameter deltas during training')
-    parser.add_argument('--use_scaling', type=bool, default=True, help='Whether to use scaling for Hessian eigenspace')
-    parser.add_argument('--adapt_downstream_tasks', type=bool, default=False, help='Whether to adapt downstream tasks using nostalgia method')
+    parser.add_argument('--log_deltas', type=str2bool, default=True, help='Whether to log parameter deltas during training')
+    parser.add_argument('--use_scaling', type=str2bool, default=False, help='Whether to use scaling for Hessian eigenspace')
+    parser.add_argument('--adapt_downstream_tasks', type=str2bool, default=False, help='Whether to adapt downstream tasks using nostalgia method')
     return parser.parse_args()
 
 
@@ -264,11 +274,11 @@ class NostalgiaExperiment:
             self.imageClassifier.add_task(task_name, self.dataset_num_classes[task_name])
 
         self.epochs_per_task = {
-            'CIFAR10': 5,
-            'CIFAR100': 5,
-            'STL10': 5,
-            'Caltech256': 5,
-            'TinyImageNet': 5,
+            'CIFAR10': 20,
+            'CIFAR100': 20,
+            'STL10': 20,
+            'Caltech256': 20,
+            'TinyImageNet': 20,
         }
 
     def retrain_task_head(
@@ -355,6 +365,7 @@ class NostalgiaExperiment:
 
         self.imageClassifier.set_active_task(task_name)
 
+        print("Scaling shape:", None if scaling is None else scaling.shape)
         self.imageClassifier.set_Q(Q_prev, scaling)
         criterion = self.imageClassifier.criterion
         niter = starting_step
@@ -439,6 +450,8 @@ class NostalgiaExperiment:
 
             print(f"\n\nStarting training on {task_name} for {epochs} epochs.")
 
+            print(f"Using scaling: {self.config.use_scaling}")
+
             total_steps = self.train_dataset(
                 task_name=task_name,
                 Q_prev=Q_prev,
@@ -522,6 +535,18 @@ if __name__ == "__main__":
         use_scaling=args.use_scaling,
         adapt_downstream_tasks=args.adapt_downstream_tasks,
     )
+
+    config.log_dir = f'./logs/nostalgia_vision_experiment/{config.mode}/{config.learning_rate}/{config.lora_r}/{config.hessian_eigenspace_dim}/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
+
+    # Create a txt file to save the config:
+    with open(f'{config.log_dir}/config.txt', 'w') as f:
+        for field in config.__dataclass_fields__:
+            f.write(f"{field}: {getattr(config, field)}\n")
+
+
+    print("Experiment Configuration:")
+    for field in config.__dataclass_fields__:
+        print(f"{field}: {getattr(config, field)}")
 
     experiment = NostalgiaExperiment(config)
     experiment.load_model()  # Load pre-trained model if available
