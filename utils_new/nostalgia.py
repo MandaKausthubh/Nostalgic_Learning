@@ -63,10 +63,7 @@ class NostalgiaOptimizer(Optimizer):
                 f"(sum of projection parameter sizes)."
             )
         self.nostalgia_Q = Q.to(self.device, self.dtype)
-        if scaling is not None:
-            self.scaling = scaling.to(self.device, self.dtype)
-        else:
-            self.scaling = None
+        self.scaling = scaling.to(self.device, self.dtype) if scaling is not None else None
 
     # ------------------------------------------------------------------
     def _flatten_grads(self) -> torch.Tensor:
@@ -124,7 +121,7 @@ class NostalgiaOptimizer(Optimizer):
             if self.writter is not None:
                 grad_norm = torch.norm(g)
                 proj_norm = torch.norm(g_projected)
-                ratio = (proj_norm / (grad_norm + self.c_scaling)).item()
+                ratio = (proj_norm / (grad_norm + 1e-12)).item()
 
                 if self.proj_ratio_ema is None:
                     self.proj_ratio_ema = ratio
