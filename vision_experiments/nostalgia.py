@@ -38,7 +38,7 @@ def get_args():
     parser.add_argument('--nostalgia_dimension', type=int, default=16, help='Dimension of Hessian low-rank for nostalgia method')
     parser.add_argument('--ewc_lambda', type=float, default=1e-3, help='EWC regularization strength')
     parser.add_argument('--l2sp_lambda', type=float, default=1e-4, help='L2-SP regularization strength')
-    parser.add_argument('--reset_lora', type=bool, default=True, help='Whether to reset LoRA parameters before training each task')
+    parser.add_argument('--reset_lora', type=bool, default=False, help='Whether to reset LoRA parameters before training each task')
     parser.add_argument('--accumulate_mode', type=str, default='union', help='Mode for accumulating Hessian eigenspaces',
                         choices=['accumulate', 'union'])
     parser.add_argument('--log_deltas', type=bool, default=True, help='Whether to log parameter deltas during training')
@@ -264,11 +264,11 @@ class NostalgiaExperiment:
             self.imageClassifier.add_task(task_name, self.dataset_num_classes[task_name])
 
         self.epochs_per_task = {
-            'CIFAR10': 30,
-            'CIFAR100': 30,
-            'STL10': 30,
-            'Caltech256': 30,
-            'TinyImageNet': 30,
+            'CIFAR10': 5,
+            'CIFAR100': 5,
+            'STL10': 5,
+            'Caltech256': 5,
+            'TinyImageNet': 5,
         }
 
     def retrain_task_head(
@@ -442,7 +442,7 @@ class NostalgiaExperiment:
             total_steps = self.train_dataset(
                 task_name=task_name,
                 Q_prev=Q_prev,
-                scaling=Lambda_prev if self.config.use_scaling else None,
+                scaling=Lambda_prev if self.config.use_scaling else None,   # TODO: Check this
                 starting_step=total_steps,
                 epochs=epochs,
                 log_deltas=self.config.log_deltas,
@@ -509,7 +509,7 @@ if __name__ == "__main__":
         device=args.device,
         hessian_eigenspace_dim=args.hessian_eigenspace_dim,
         validate_after_steps=args.validate_after_steps,
-        log_dir=args.log_dir,
+        # log_dir=args.log_dir,
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
