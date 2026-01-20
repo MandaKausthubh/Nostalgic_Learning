@@ -36,7 +36,7 @@ def get_args():
                         choices=['nostalgia', 'l2sp', 'EWC', 'Adam'])
     parser.add_argument('--root_dir', type=str, default='/Users/mandakausthubh/data', help='Root directory for datasets')
     parser.add_argument('--batch_size', type=int, default=128, help='Batch size for training')
-    parser.add_argument('--learning_rate', type=float, default=5e-4, help='Learning rate for optimizer')
+    parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate for optimizer')
     parser.add_argument('--device', type=str, default='mps', help='Device to use for training (e.g., cpu, cuda, mps)',
                         choices=['cpu', 'cuda', 'mps'])
     parser.add_argument('--hessian_eigenspace_dim', type=int, default=32, help='Dimension of Hessian eigenspace')
