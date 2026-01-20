@@ -20,7 +20,6 @@ class NostalgiaOptimizer(Optimizer):
         writter: Optional[Any] = None,
         starting_step: int = 0,
         log_every: int = 50,
-        c_scaling: float = 1e-6
     ):
         super().__init__(params, {})  # Dummy call to satisfy Optimizer base class
         # Important: we do NOT pass params to super(); base_optimizer owns them
@@ -43,7 +42,6 @@ class NostalgiaOptimizer(Optimizer):
         self.param_numels = [p.numel() for p in self.projection_params]
         self.num_params = sum(self.param_numels)
         self.k_max: Optional[int] = None
-        self.c_scaling = c_scaling
 
         # New list of hessian eigenvectors and eigenvalues
         # self.nostalgia_Q: List[torch.Tensor] = []
@@ -106,10 +104,11 @@ class NostalgiaOptimizer(Optimizer):
 
             # Optional eigenvalue-aware scaling
             if self.scaling is not None:
+                c_scaling = torch.median(self.scaling) + 1e-12
                 if self.scaling.ndim == 1:
-                    coeffs = coeffs * self.scaling
+                    coeffs = coeffs * (self.scaling / (c_scaling + self.scaling))
                 else:
-                    coeffs = self.scaling @ coeffs
+                    coeffs = (self.scaling/(c_scaling + self.scaling)) @ coeffs
 
             # Q (Q^T g)
             projection = self.nostalgia_Q @ coeffs

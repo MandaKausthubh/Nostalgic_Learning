@@ -274,11 +274,11 @@ class NostalgiaExperiment:
             self.imageClassifier.add_task(task_name, self.dataset_num_classes[task_name])
 
         self.epochs_per_task = {
-            'CIFAR10': 20,
-            'CIFAR100': 20,
-            'STL10': 20,
-            'Caltech256': 20,
-            'TinyImageNet': 20,
+            'CIFAR10': 30,
+            'CIFAR100': 30,
+            'STL10': 30,
+            'Caltech256': 30,
+            'TinyImageNet': 30,
         }
 
     def retrain_task_head(
@@ -498,7 +498,7 @@ class NostalgiaExperiment:
                     self.imageClassifier._apply_peft()
 
             # Save model after each task
-            self.save_model(f'./model_weights/nostalgia_model_after_{task_name}.pth')
+            self.save_model(f'./model_weights/vision/nostalgia_model_after_{task_name}.pth')
 
             print(f"Completed training on {task_name}.")
             print(f"Total steps so far: {total_steps}.")
@@ -538,10 +538,6 @@ if __name__ == "__main__":
 
     config.log_dir = f'./logs/nostalgia_vision_experiment/{config.mode}/{config.learning_rate}/{config.lora_r}/{config.hessian_eigenspace_dim}/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
 
-    # Create a txt file to save the config:
-    with open(f'{config.log_dir}/config.txt', 'w') as f:
-        for field in config.__dataclass_fields__:
-            f.write(f"{field}: {getattr(config, field)}\n")
 
 
     print("Experiment Configuration:")
@@ -550,6 +546,12 @@ if __name__ == "__main__":
 
     experiment = NostalgiaExperiment(config)
     experiment.load_model()  # Load pre-trained model if available
+
+    # Create a txt file to save the config:
+    with open(f'{config.log_dir}/config.txt', 'w') as f:
+        for field in config.__dataclass_fields__:
+            f.write(f"{field}: {getattr(config, field)}\n")
+
     experiment.train()
 
     # Testing merge and unload/apply PEFT

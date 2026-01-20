@@ -19,7 +19,7 @@ from utils_new.nostalgia import NostalgiaOptimizer
 
 
 class LlamaEncoder(nn.Module):
-    def __init__(self, model_id: str = "meta-llama/Llama-3.2-3B"):
+    def __init__(self, model_id: str = "meta-llama/Llama-3.2-3B", using_mps=False):
         super().__init__()
         self.model_id = model_id
 
@@ -36,7 +36,7 @@ class LlamaEncoder(nn.Module):
         self.llama = AutoModel.from_pretrained(
             model_id,
             config=self.config,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.bfloat16 if not using_mps else torch.float32,
         )
 
         self.hidden_size = self.config.hidden_size
@@ -80,11 +80,12 @@ class NLPClassifierLLaMA(pl.LightningModule):
         use_peft=True,
         lora_modules=None,
         use_nostalgia=True,
+        using_mps=False,
     ):
         super().__init__()
 
         # Backbone
-        self.backbone = LlamaEncoder(model_id)
+        self.backbone = LlamaEncoder(model_id, using_mps=using_mps)
         self.rep_dim = self.backbone.hidden_size
 
         # LoRA
@@ -122,6 +123,9 @@ class NLPClassifierLLaMA(pl.LightningModule):
         self.criterion = nn.CrossEntropyLoss(ignore_index=-100)
         self.learning_rate = learning_rate
 
+        self.nostalgia_Q = None
+        self.nostalgia_scaling = None
+
 
 
     def _apply_peft(self):
@@ -153,6 +157,8 @@ class NLPClassifierLLaMA(pl.LightningModule):
 
         for p in head.parameters():
             p.requires_grad = False
+
+    def preprocess_inputs(self, x): return x
 
 
     def set_active_task(self, task_name: str):
@@ -211,6 +217,11 @@ class NLPClassifierLLaMA(pl.LightningModule):
         return [p for _, p in self.backbone.named_parameters() if p.requires_grad]
 
 
+    def set_Q(self, Q: Optional[torch.Tensor], scaling: Optional[torch.Tensor] = None):
+        self.nostalgia_Q = Q
+        self.nostalgia_scaling = scaling
+
+
     def configure_optimizers(
         self,
         writter: Optional[SummaryWriter] = None,
@@ -246,3 +257,81 @@ class NLPClassifierLLaMA(pl.LightningModule):
             nostalgia_opt.set_Q(self.nostalgia_Q, self.nostalgia_scaling)
 
         return nostalgia_opt
+
+    def l2sp_regularization(self, model_before: Dict[str, torch.Tensor], lambda_l2sp: float):
+        l2sp_loss = 0.0
+        for name, param in self.backbone.named_parameters():
+            if name in model_before and param.requires_grad:
+                l2sp_loss += torch.sum((param - model_before[name].to(param.device)) ** 2)
+        l2sp_loss = lambda_l2sp * l2sp_loss
+        return l2sp_loss
+
+    def get_fisher_information(
+        self,
+        dataloader: torch.utils.data.DataLoader,
+        max_batches: Optional[int] = None,
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Compute empirical Fisher Information for EWC.
+        
+        IMPORTANT:
+        - Only valid for SEQUENCE-level tasks (SST-2, MNLI).
+        - Token-level tasks (e.g. CoNLL) are intentionally skipped.
+        - Fisher is computed ONLY over trainable (LoRA) parameters.
+        """
+
+        # -------------------------------
+        # Guard: skip token-level tasks
+        # -------------------------------
+        if self.task_type[self.active_task] == "token":  # type: ignore
+            print(
+                f"[EWC] Skipping Fisher computation for token-level task: {self.active_task}"
+            )
+            return {}
+
+        fisher_information: Dict[str, torch.Tensor] = {}
+        self.backbone.eval()
+
+        for batch_idx, batch in enumerate(dataloader):
+            if max_batches is not None and batch_idx >= max_batches:
+                break
+
+            input_ids = batch["input_ids"].to(self.device)
+            attention_mask = batch["attention_mask"].to(self.device)
+
+            self.zero_grad()
+
+            # Forward pass
+            logits = self(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+            )  # (B, C)
+
+            # Sample labels from model distribution (empirical Fisher)
+            with torch.no_grad():
+                probs = torch.softmax(logits, dim=-1)
+                sampled_labels = torch.multinomial(probs, num_samples=1).squeeze(-1)
+
+            # Negative log-likelihood
+            loss = F.nll_loss(
+                torch.log_softmax(logits, dim=-1),
+                sampled_labels,
+            )
+
+            # Backward pass
+            loss.backward()
+
+            # Accumulate squared gradients
+            for name, param in self.backbone.named_parameters():
+                if param.requires_grad and param.grad is not None:
+                    if name not in fisher_information:
+                        fisher_information[name] = param.grad.detach().clone().pow(2)
+                    else:
+                        fisher_information[name] += param.grad.detach().clone().pow(2)
+
+        # Normalize
+        num_batches = len(dataloader) if max_batches is None else min(len(dataloader), max_batches)
+        for name in fisher_information:
+            fisher_information[name] /= num_batches
+
+        return fisher_information
