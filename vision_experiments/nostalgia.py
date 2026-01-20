@@ -8,6 +8,8 @@ from utils_new.accumulate import accumulate_hessian_eigenspace
 from utils_new.ortho_accumulate import update_Q_lambda_union
 from utils_new.hessian import compute_Q_for_task
 
+from datasets import ImageNet2p, ImageNetA, ImageNetR, ImageNetV2
+
 from models.vit32 import ImageClassifierViT
 from tqdm import tqdm
 import datetime
@@ -54,6 +56,7 @@ def get_args():
     parser.add_argument('--log_deltas', type=str2bool, default=True, help='Whether to log parameter deltas during training')
     parser.add_argument('--use_scaling', type=str2bool, default=False, help='Whether to use scaling for Hessian eigenspace')
     parser.add_argument('--adapt_downstream_tasks', type=str2bool, default=False, help='Whether to adapt downstream tasks using nostalgia method')
+    parser.add_argument('--num_workers', type=int, default=4, help='Number of workers for data loading')
     return parser.parse_args()
 
 
@@ -70,6 +73,7 @@ class NostalgiaConfig:
     device: str = 'mps'
     validate_after_steps: int = 10
     log_deltas: bool = True
+    num_workers: int = 4
 
     hessian_eigenspace_dim: int = 16
 
@@ -218,68 +222,113 @@ class NostalgiaExperiment:
         # TODO: Implement dataset preparation logic
         # CIFAR10 datasets
         batch_size = self.config.batch_size
-        cifar10_train_dataset = datasets.CIFAR10(root=f'{self.config.root_dir}', train=True, download=True, transform=self.transform)
-        cifar10_val_dataset = datasets.CIFAR10(root=f'{self.config.root_dir}', train=False, download=True, transform=self.transform)
-        cifar10_train_loader = DataLoader(cifar10_train_dataset, batch_size=batch_size, shuffle=True)
-        cifar10_val_loader = DataLoader(cifar10_val_dataset, batch_size=batch_size, shuffle=False)
+        # cifar10_train_dataset = datasets.CIFAR10(root=f'{self.config.root_dir}', train=True, download=True, transform=self.transform)
+        # cifar10_val_dataset = datasets.CIFAR10(root=f'{self.config.root_dir}', train=False, download=True, transform=self.transform)
+        # cifar10_train_loader = DataLoader(cifar10_train_dataset, batch_size=batch_size, shuffle=True)
+        # cifar10_val_loader = DataLoader(cifar10_val_dataset, batch_size=batch_size, shuffle=False)
+        #
+        # # CIFAR-100 datasets
+        # cifar100_train_dataset = datasets.CIFAR100(root=f'{self.config.root_dir}', train=True, download=True, transform=self.transform)
+        # cifar100_val_dataset = datasets.CIFAR100(root=f'{self.config.root_dir}', train=False, download=True, transform=self.transform)
+        # cifar100_train_loader = DataLoader(cifar100_train_dataset, batch_size=batch_size, shuffle=True)
+        # cifar100_val_loader = DataLoader(cifar100_val_dataset, batch_size=batch_size, shuffle=False)
+        #
+        # # STL-10 datasets
+        # stl10_train_dataset = datasets.STL10(root=f'{self.config.root_dir}', split='train', download=True, transform=self.transform)
+        # stl10_val_dataset = datasets.STL10(root=f'{self.config.root_dir}', split='test', download=True, transform=self.transform)
+        # stl10_train_loader = DataLoader(stl10_train_dataset, batch_size=batch_size, shuffle=True)
+        # stl10_val_loader = DataLoader(stl10_val_dataset, batch_size=batch_size, shuffle=False)
+        #
+        # # Caltech-256 datasets
+        # caltech256_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
+        # total_size = len(caltech256_dataset)
+        # train_size = int(0.9 * total_size)
+        # val_size = total_size - train_size
+        # caltech256_train_dataset, caltech256_val_dataset = torch.utils.data.random_split(caltech256_dataset, [train_size, val_size])
+        # # caltech256_train_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
+        # # caltech256_val_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
+        # caltech256_train_loader = DataLoader(caltech256_train_dataset, batch_size=batch_size, shuffle=True)
+        # caltech256_val_loader = DataLoader(caltech256_val_dataset, batch_size=batch_size, shuffle=False)
+        #
+        # # Tiny ImageNet datasets
+        # tiny_imagenet_train_dataset = datasets.ImageFolder(root=f'{self.config.root_dir}/tiny-imagenet-200/train', transform=self.transform)
+        # tiny_imagenet_val_dataset = datasets.ImageFolder(root=f'{self.config.root_dir}/tiny-imagenet-200/val', transform=self.transform)
+        # tiny_imagenet_train_loader = DataLoader(tiny_imagenet_train_dataset, batch_size=batch_size, shuffle=True)
+        # tiny_imagenet_val_loader = DataLoader(tiny_imagenet_val_dataset, batch_size=batch_size, shuffle=False)
+        #
+        # self.datasets = {
+        #     'CIFAR10': (cifar10_train_loader, cifar10_val_loader),
+        #     'CIFAR100': (cifar100_train_loader, cifar100_val_loader),
+        #     'STL10': (stl10_train_loader, stl10_val_loader),
+        #     'Caltech256': (caltech256_train_loader, caltech256_val_loader),
+        #     'TinyImageNet': (tiny_imagenet_train_loader, tiny_imagenet_val_loader),
+        # }
+        #
+        # self.order_of_tasks = ['CIFAR10', 'CIFAR100', 'STL10', 'Caltech256', 'TinyImageNet']
+        #
+        # self.dataset_num_classes = {
+        #     'CIFAR10': 10,
+        #     'CIFAR100': 100,
+        #     'STL10': 10,
+        #     'Caltech256': 256,
+        #     'TinyImageNet': 200,
+        # }
+        #
+        # for task_name in self.datasets.keys():
+        #     self.imageClassifier.add_task(task_name, self.dataset_num_classes[task_name])
+        #
+        # self.epochs_per_task = {
+        #     'CIFAR10': 30,
+        #     'CIFAR100': 30,
+        #     'STL10': 30,
+        #     'Caltech256': 30,
+        #     'TinyImageNet': 30,
+        # }
 
-        # CIFAR-100 datasets
-        cifar100_train_dataset = datasets.CIFAR100(root=f'{self.config.root_dir}', train=True, download=True, transform=self.transform)
-        cifar100_val_dataset = datasets.CIFAR100(root=f'{self.config.root_dir}', train=False, download=True, transform=self.transform)
-        cifar100_train_loader = DataLoader(cifar100_train_dataset, batch_size=batch_size, shuffle=True)
-        cifar100_val_loader = DataLoader(cifar100_val_dataset, batch_size=batch_size, shuffle=False)
+        # Using ImageNet variants as datasets
+        imagenet2p_dataset = ImageNet2p(self.transform, self.config.root_dir, self.config.batch_size, self.config.num_workers)
+        imagenet2p_train_loader = imagenet2p_dataset.train_loader
+        imagenet2p_val_loader = imagenet2p_dataset.test_loader
 
-        # STL-10 datasets
-        stl10_train_dataset = datasets.STL10(root=f'{self.config.root_dir}', split='train', download=True, transform=self.transform)
-        stl10_val_dataset = datasets.STL10(root=f'{self.config.root_dir}', split='test', download=True, transform=self.transform)
-        stl10_train_loader = DataLoader(stl10_train_dataset, batch_size=batch_size, shuffle=True)
-        stl10_val_loader = DataLoader(stl10_val_dataset, batch_size=batch_size, shuffle=False)
+        imagenet_a_dataset = ImageNetA(self.transform, self.config.root_dir, self.config.batch_size, self.config.num_workers)
+        imagenet_a_train_loader = imagenet_a_dataset.train_loader
+        imagenet_a_val_loader = imagenet_a_dataset.test_loader
 
-        # Caltech-256 datasets
-        caltech256_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
-        total_size = len(caltech256_dataset)
-        train_size = int(0.9 * total_size)
-        val_size = total_size - train_size
-        caltech256_train_dataset, caltech256_val_dataset = torch.utils.data.random_split(caltech256_dataset, [train_size, val_size])
-        # caltech256_train_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
-        # caltech256_val_dataset = datasets.Caltech256(root=f'{self.config.root_dir}/caltech256', download=True, transform=self.transform)
-        caltech256_train_loader = DataLoader(caltech256_train_dataset, batch_size=batch_size, shuffle=True)
-        caltech256_val_loader = DataLoader(caltech256_val_dataset, batch_size=batch_size, shuffle=False)
+        imagenet_r_dataset = ImageNetR(self.transform, self.config.root_dir, self.config.batch_size, self.config.num_workers)
+        imagenet_r_train_loader = imagenet_r_dataset.train_loader
+        imagenet_r_val_loader = imagenet_r_dataset.test_loader
 
-        # Tiny ImageNet datasets
-        tiny_imagenet_train_dataset = datasets.ImageFolder(root=f'{self.config.root_dir}/tiny-imagenet-200/train', transform=self.transform)
-        tiny_imagenet_val_dataset = datasets.ImageFolder(root=f'{self.config.root_dir}/tiny-imagenet-200/val', transform=self.transform)
-        tiny_imagenet_train_loader = DataLoader(tiny_imagenet_train_dataset, batch_size=batch_size, shuffle=True)
-        tiny_imagenet_val_loader = DataLoader(tiny_imagenet_val_dataset, batch_size=batch_size, shuffle=False)
+        imagenet_v2_dataset = ImageNetV2(self.transform, self.config.root_dir, self.config.batch_size, self.config.num_workers)
+        imagenet_v2_train_loader = imagenet_v2_dataset.train_loader
+        imagenet_v2_val_loader = imagenet_v2_dataset.test_loader
 
         self.datasets = {
-            'CIFAR10': (cifar10_train_loader, cifar10_val_loader),
-            'CIFAR100': (cifar100_train_loader, cifar100_val_loader),
-            'STL10': (stl10_train_loader, stl10_val_loader),
-            'Caltech256': (caltech256_train_loader, caltech256_val_loader),
-            'TinyImageNet': (tiny_imagenet_train_loader, tiny_imagenet_val_loader),
+            'ImageNet2p': (imagenet2p_train_loader, imagenet2p_val_loader),
+            'ImageNetA': (imagenet_a_train_loader, imagenet_a_val_loader),
+            'ImageNetR': (imagenet_r_train_loader, imagenet_r_val_loader),
+            'ImageNetV2': (imagenet_v2_train_loader, imagenet_v2_val_loader),
         }
 
-        self.order_of_tasks = ['CIFAR10', 'CIFAR100', 'STL10', 'Caltech256', 'TinyImageNet']
+        self.order_of_tasks = ['ImageNet2p', 'ImageNetA', 'ImageNetR', 'ImageNetV2']
 
         self.dataset_num_classes = {
-            'CIFAR10': 10,
-            'CIFAR100': 100,
-            'STL10': 10,
-            'Caltech256': 256,
-            'TinyImageNet': 200,
+            'ImageNet2p': 1000,
+            'ImageNetA': 1000,
+            'ImageNetR': 1000,
+            'ImageNetV2': 1000,
+        }
+
+        self.epochs_per_task = {
+            'ImageNet2p': 5,
+            'ImageNetA': 5,
+            'ImageNetR': 5,
+            'ImageNetV2': 5,
         }
 
         for task_name in self.datasets.keys():
             self.imageClassifier.add_task(task_name, self.dataset_num_classes[task_name])
 
-        self.epochs_per_task = {
-            'CIFAR10': 30,
-            'CIFAR100': 30,
-            'STL10': 30,
-            'Caltech256': 30,
-            'TinyImageNet': 30,
-        }
+
 
     def retrain_task_head(
         self,
@@ -534,6 +583,7 @@ if __name__ == "__main__":
         log_deltas=args.log_deltas,
         use_scaling=args.use_scaling,
         adapt_downstream_tasks=args.adapt_downstream_tasks,
+        num_workers=args.num_workers,
     )
 
     config.log_dir = f'./logs/nostalgia_vision_experiment/{config.mode}/{config.learning_rate}/{config.lora_r}/{config.hessian_eigenspace_dim}/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
