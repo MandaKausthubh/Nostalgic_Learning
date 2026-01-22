@@ -8,7 +8,7 @@ from utils_new.accumulate import accumulate_hessian_eigenspace
 from utils_new.ortho_accumulate import update_Q_lambda_union
 from utils_new.hessian import compute_Q_for_task
 
-from datasets import ImageNet2p, ImageNetA, ImageNetR, ImageNetV2, ImageNet
+from datasets import get_imagenet_splits
 
 from models.vit32 import ImageClassifierViT
 from tqdm import tqdm
@@ -287,11 +287,21 @@ class NostalgiaExperiment:
 
         # Using ImageNet variants as datasets
 
-        self.dataset_lengths = {}
+        dataset_splits = get_imagenet_splits(location=self.config.root_dir, preprocess=self.transform, batch_size=256, num_workers=self.config.num_workers)
+        self.datasets = {
+            f'Split{i}': (dataset.train_loader, dataset.test_loader) for i, dataset in enumerate(dataset_splits, start=1)
+        }
+        self.order_of_tasks = [f'Split{i}' for i in range(1, len(dataset_splits)+1)]
+        self.dataset_num_classes = {
+            task_name: 200 for i, task_name in enumerate(self.order_of_tasks, start=1)  # hard coding this
+        }
 
-        imagenet = ImageNet(self.transform, self.config.root_dir, self.config.batch_size, self.config.num_workers)
-        imagenet_train_loader = imagenet.train_loader
-        imagenet_val_loader = imagenet.test_loader
+        for task_name in self.datasets.keys():
+            self.imageClassifier.add_task(task_name, self.dataset_num_classes[task_name])
+
+        self.epochs_per_task = {
+            task_name: 10 for task_name in self.datasets.keys()
+        }
 
 
 

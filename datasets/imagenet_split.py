@@ -2,7 +2,7 @@ from datasets.imagenet import *
 from .common import ImageFolderWithPaths
 from typing import List, Optional
 import torch
-from torch.utils.data import Subset, RandomSampler, SequentialSampler
+from torch.utils.data import SubsetRandomSampler, RandomSampler, SequentialSampler
 
 class ImageNetSplit(ImageNet):
     """
@@ -51,7 +51,7 @@ class ImageNetSplit(ImageNet):
         if not indices:
             raise ValueError(f"No training images found for classes {self.class_indices}")
 
-        subset = Subset(self.train_dataset, indices)
+        subset = SubsetRandomSampler(indices)
 
         if self.distributed:
             return torch.utils.data.distributed.DistributedSampler(subset)
@@ -69,7 +69,7 @@ class ImageNetSplit(ImageNet):
             raise ValueError(f"No validation images found for classes {self.class_indices}")
 
         # Always use SequentialSampler for validation (deterministic, full subset)
-        subset = Subset(self.test_dataset, indices)
+        subset = SubsetRandomSampler(indices)
         return SequentialSampler(subset)
 
     # Optional: helpers for projecting outputs/labels to the sub-task space
