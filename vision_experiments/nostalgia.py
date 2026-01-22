@@ -373,8 +373,8 @@ class NostalgiaExperiment:
                 total_loss += loss.item() * input.size(0)
                 accuracy += (output.argmax(dim=1) == target).sum().item()
 
-        loss = total_loss / self.dataset_lengths[task_name] #type: ignore
-        accuracy = accuracy / self.dataset_lengths[task_name] #type: ignore
+        loss = total_loss / len(val_loader.dataset)     # type: ignore
+        accuracy = accuracy / len(val_loader.dataset)   # type: ignore
 
         self.writer.add_scalar( f'{task_name}/validation_loss', loss, iteration)
         self.writer.add_scalar( f'{task_name}/validation_accuracy', accuracy, iteration)
