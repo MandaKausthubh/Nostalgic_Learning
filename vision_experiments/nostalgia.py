@@ -8,7 +8,7 @@ from utils_new.accumulate import accumulate_hessian_eigenspace
 from utils_new.ortho_accumulate import update_Q_lambda_union
 from utils_new.hessian import compute_Q_for_task
 
-from datasets import get_imagenet_splits
+from datasets import get_imagenet_split
 
 from models.vit32 import ImageClassifierViT
 from tqdm import tqdm
@@ -287,7 +287,7 @@ class NostalgiaExperiment:
 
         # Using ImageNet variants as datasets
 
-        dataset_splits = get_imagenet_splits(
+        dataset_splits = get_imagenet_split(
             location=self.config.root_dir,
             preprocess=self.transform,
             batch_size=self.config.batch_size,
