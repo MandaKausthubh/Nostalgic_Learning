@@ -4,135 +4,117 @@ from typing import List, Optional
 import torch
 from torch.utils.data import SubsetRandomSampler, RandomSampler, SequentialSampler
 
+
+
+
 class ImageNetSplit(ImageNet):
-    """
-    ImageNet dataset for training and testing on only a subset of classes...
-    """
     def __init__(
         self,
-        location: str,
-        preprocess,
-        batch_size: int,
-        num_workers: int = 4,
-        distributed: bool = False,
-        class_indices: Optional[List[int]] = None,
-        classnames: str = 'openai',
+        split_labels: Optional[List[int]] = None,
+        split_name: str = "custom_split",
+        **kwargs,
     ):
-        if class_indices is None:
-            raise ValueError("class_indices must be provided for ImageNetSplit")
+        """
+        split_indices: Optional list of dataset indices to include in this split.
+                       If None, uses the full dataset.
+        split_name: Name of the split (used for directory naming).
+        """
+        self.split_labels = split_labels 
+        self.split_name = split_name
+        super().__init__(**kwargs)
 
-        self.class_indices = sorted(class_indices)
-        self.class_sublist = self.class_indices
-        self.class_sublist_mask = [i in self.class_indices for i in range(1000)]
+    def name(self) -> str:  # type: ignore
+        return f"imagenet_{self.split_name}"
 
-        # Define classnames as a normal attribute BEFORE super()
-        # This shadows the base property and allows assignment
-        base_names = get_classnames(classnames)
-        self.classnames = [base_names[i] for i in self.class_indices]
+    def populate_train(self):
+        traindir = os.path.join(self.location, "train")
+        full_dataset = ImageFolderWithPaths(traindir, transform=self.preprocess)
+        if self.split_labels is not None:
+            split_indices = [
+                idx for idx, (_, label) in enumerate(full_dataset.samples)
+                if label in self.split_labels
+            ]
+            self.train_dataset = Subset(full_dataset, split_indices)
+        else:
+            self.train_dataset = full_dataset
 
-        # Now safe to call super — base will see self.classnames as attr, not property
-        super().__init__(
-            preprocess=preprocess,
-            location=location,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            classnames=classnames,  # base still gets this, but won't overwrite ours
-            distributed=distributed,
+        self.sampler = self.get_train_sampler()
+        self.train_loader = torch.utils.data.DataLoader(
+            self.train_dataset,
+            sampler=self.sampler,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            shuffle=(self.sampler is None),
         )
 
-    def get_train_sampler(self):
-        # Filter indices to only images from the allowed classes
-        if hasattr(self.train_dataset, 'targets'):
-            indices = [i for i, target in enumerate(self.train_dataset.targets) if target in self.class_indices]
+    def populate_test(self):
+        testdir = os.path.join(self.location, "val")
+        full_dataset = ImageFolderWithPaths(testdir, transform=self.preprocess)
+        if self.split_labels is not None:
+            split_indices = [
+                idx for idx, (_, label) in enumerate(full_dataset.samples)
+                if label in self.split_labels
+            ]
+            self.test_dataset = Subset(full_dataset, split_indices)
         else:
-            # Fallback: extract from samples
-            indices = [i for i, (_, target) in enumerate(self.train_dataset.samples) if target in self.class_indices]
+            self.test_dataset = full_dataset
 
-        if not indices:
-            raise ValueError(f"No training images found for classes {self.class_indices}")
-
-        subset = SubsetRandomSampler(indices)
-
-        if self.distributed:
-            return torch.utils.data.distributed.DistributedSampler(subset)
-        else:
-            return RandomSampler(subset)  # random order, no replacement
-
-    def get_test_sampler(self):
-        # Filter val indices to only images from the allowed classes
-        if hasattr(self.test_dataset, 'targets'):
-            indices = [i for i, target in enumerate(self.test_dataset.targets) if target in self.class_indices]
-        else:
-            indices = [i for i, (_, target) in enumerate(self.test_dataset.samples) if target in self.class_indices]
-
-        if not indices:
-            raise ValueError(f"No validation images found for classes {self.class_indices}")
-
-        # Always use SequentialSampler for validation (deterministic, full subset)
-        subset = SubsetRandomSampler(indices)
-        return SequentialSampler(subset)
-
-    # Optional: helpers for projecting outputs/labels to the sub-task space
-    def project_logits(self, logits, device):
-        if logits.dim() == 2 and logits.size(1) == 1000:
-            # Full 1000-class logits → slice to selected classes
-            return logits[:, self.class_indices].to(device)
-        return logits.to(device)  # already projected or different shape
-
-    def project_labels(self, labels, device):
-        # Map original ImageNet labels (0-999) → 0 to (num_classes-1)
-        label_map = {orig: new for new, orig in enumerate(self.class_indices)}
-        projected = [label_map[int(l)] for l in labels]
-        return torch.tensor(projected, dtype=torch.long, device=device)
-
-    # If you want to override classnames (for logging/display)
-    def classnames(self):
-        base_names = get_classnames('openai')  # or whatever your base uses
-        return [base_names[i] for i in self.class_indices]
-
-
-
-
+        self.test_loader = torch.utils.data.DataLoader(
+            self.test_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            sampler=self.get_test_sampler(),
+        )
 
 
 
 class ImageNetSplitTask1(ImageNetSplit):
-    def __init__(self, location: str, preprocess, batch_size: int, num_workers: int = 4, distributed: bool = False):
-        class_indices = list(range(0, 200))  # Classes 0-199
-        super().__init__(location, preprocess, batch_size, num_workers, distributed, class_indices)
-
+    def __init__(self, **kwargs):
+        split_labels = list(range(0, 200))
+        super().__init__(split_labels=split_labels, split_name="task1", **kwargs)
 
 class ImageNetSplitTask2(ImageNetSplit):
-    def __init__(self, location: str, preprocess, batch_size: int, num_workers: int = 4, distributed: bool = False):
-        class_indices = list(range(200, 400))  # Classes 200-399
-        super().__init__(location, preprocess, batch_size, num_workers, distributed, class_indices)
-
+    def __init__(self, **kwargs):
+        split_labels = list(range(200, 400))
+        super().__init__(split_labels=split_labels, split_name="task2", **kwargs)
 
 class ImageNetSplitTask3(ImageNetSplit):
-    def __init__(self, location: str, preprocess, batch_size: int, num_workers: int = 4, distributed: bool = False):
-        class_indices = list(range(400, 600))  # Classes 400-599
-        super().__init__(location, preprocess, batch_size, num_workers, distributed, class_indices)
+    def __init__(self, **kwargs):
+        split_labels = list(range(400, 600))
+        super().__init__(split_labels=split_labels, split_name="task3", **kwargs)
 
 class ImageNetSplitTask4(ImageNetSplit):
-    def __init__(self, location: str, preprocess, batch_size: int, num_workers: int = 4, distributed: bool = False):
-        class_indices = list(range(600, 800))  # Classes 600-799
-        super().__init__(location, preprocess, batch_size, num_workers, distributed, class_indices)
-
+    def __init__(self, **kwargs):
+        split_labels = list(range(600, 800))
+        super().__init__(split_labels=split_labels, split_name="task4", **kwargs)
 
 class ImageNetSplitTask5(ImageNetSplit):
-    def __init__(self, location: str, preprocess, batch_size: int, num_workers: int = 4, distributed: bool = False):
-        class_indices = list(range(800, 1000))  # Classes 800-999
-        super().__init__(location, preprocess, batch_size, num_workers, distributed, class_indices)
+    def __init__(self, **kwargs):
+        split_labels = list(range(800, 1000))
+        super().__init__(split_labels=split_labels, split_name="task5", **kwargs)
 
-def get_imagenet_splits(location: str, preprocess, batch_size: int, num_workers: int = 4, distributed: bool = False):
+
+def get_imagenet_split_task_classes(
+        preprocess,
+        location,
+        batch_size=64,
+        num_workers=8,
+        distributed=False
+):
+    kwargs = {
+        "preprocess": preprocess,
+        "location": location,
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "distributed": distributed,
+    }
+
     return [
-        ImageNetSplitTask1(location, preprocess, batch_size, num_workers, distributed),
-        ImageNetSplitTask2(location, preprocess, batch_size, num_workers, distributed),
-        ImageNetSplitTask3(location, preprocess, batch_size, num_workers, distributed),
-        ImageNetSplitTask4(location, preprocess, batch_size, num_workers, distributed),
-        ImageNetSplitTask5(location, preprocess, batch_size, num_workers, distributed),
+        ImageNetSplitTask1(**kwargs),
+        ImageNetSplitTask2(**kwargs),
+        ImageNetSplitTask3(**kwargs),
+        ImageNetSplitTask4(**kwargs),
+        ImageNetSplitTask5(**kwargs),
     ]
-
-
-
-

@@ -33,15 +33,13 @@ class ImageNet:
             )
         sampler = self.get_train_sampler()
         self.sampler = sampler
-        kwargs = {'shuffle' : True} if sampler is None else {}
-        # print('kwargs is', kwargs)
         self.train_loader = torch.utils.data.DataLoader(
             self.train_dataset,
             sampler=sampler,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=True,
-            **kwargs,
+            shuffle= (sampler is None),
         )
 
     def populate_test(self):
@@ -70,13 +68,14 @@ class ImageNet:
     def get_test_dataset(self):
         return ImageFolderWithPaths(self.get_test_path(), transform=self.preprocess)
 
-    def name(self):
+    def name(self) -> str:
         return 'imagenet'
 
 class ImageNetTrain(ImageNet):
-
     def get_test_dataset(self):
         pass
+
+
 
 def project_logits(logits, class_sublist_mask, device):
     if isinstance(logits, list):
