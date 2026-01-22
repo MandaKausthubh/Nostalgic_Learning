@@ -6,8 +6,7 @@ from torch.utils.data import Subset, RandomSampler, SequentialSampler
 
 class ImageNetSplit(ImageNet):
     """
-    ImageNet dataset for training and testing on only a subset of classes defined by a list of class indices.
-    Supports distributed training and per-task projection for continual/class-incremental learning.
+    ImageNet dataset for training and testing on only a subset of classes...
     """
     def __init__(
         self,
@@ -17,22 +16,27 @@ class ImageNetSplit(ImageNet):
         num_workers: int = 4,
         distributed: bool = False,
         class_indices: Optional[List[int]] = None,
-        classnames: str = 'openai',  # passed to base if needed
+        classnames: str = 'openai',
     ):
         if class_indices is None:
             raise ValueError("class_indices must be provided for ImageNetSplit")
-        
-        self.class_indices = sorted(class_indices)  # ensure deterministic order
+
+        self.class_indices = sorted(class_indices)
         self.class_sublist = self.class_indices
         self.class_sublist_mask = [i in self.class_indices for i in range(1000)]
-        
-        # Pass to base class (which will call populate_train/test)
+
+        # Define classnames as a normal attribute BEFORE super()
+        # This shadows the base property and allows assignment
+        base_names = get_classnames(classnames)
+        self.classnames = [base_names[i] for i in self.class_indices]
+
+        # Now safe to call super — base will see self.classnames as attr, not property
         super().__init__(
             preprocess=preprocess,
             location=location,
             batch_size=batch_size,
             num_workers=num_workers,
-            classnames=classnames,
+            classnames=classnames,  # base still gets this, but won't overwrite ours
             distributed=distributed,
         )
 
