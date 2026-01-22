@@ -96,7 +96,7 @@ class ImageNetSplitTask5(ImageNetSplit):
         super().__init__(split_labels=split_labels, split_name="task5", **kwargs)
 
 
-def get_imagenet_split_task_classes(
+def get_imagenet_split(
         preprocess,
         location,
         batch_size=64,
