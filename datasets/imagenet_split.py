@@ -15,7 +15,7 @@ class RemapLabels(torch.utils.data.Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        data, label = self.dataset[idx]  # type: ignore
+        data, label = self.dataset[idx]['images'], self.dataset[idx]['labels']  # type: ignore
         new_label = self.label_map.get(label, label)
         return data, new_label
 
