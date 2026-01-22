@@ -287,9 +287,15 @@ class NostalgiaExperiment:
 
         # Using ImageNet variants as datasets
 
-        dataset_splits = get_imagenet_splits(location=self.config.root_dir, preprocess=self.transform, batch_size=256, num_workers=self.config.num_workers)
+        dataset_splits = get_imagenet_splits(
+            location=self.config.root_dir,
+            preprocess=self.transform,
+            batch_size=self.config.batch_size,
+            num_workers=self.config.num_workers
+        )
         self.datasets = {
-            f'Split{i}': (dataset.train_loader, dataset.test_loader) for i, dataset in enumerate(dataset_splits, start=1)
+            f'ImageNet/Split{i}': (dataset.train_loader, dataset.test_loader) 
+            for i, dataset in enumerate(dataset_splits, start=1)
         }
         self.order_of_tasks = [f'Split{i}' for i in range(1, len(dataset_splits)+1)]
         self.dataset_num_classes = {

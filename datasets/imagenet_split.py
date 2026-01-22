@@ -2,9 +2,22 @@ from datasets.imagenet import *
 from .common import ImageFolderWithPaths
 from typing import List, Optional
 import torch
-from torch.utils.data import SubsetRandomSampler, RandomSampler, SequentialSampler
 
 
+class RemapLabels(torch.utils.data.Dataset):
+    def __init__(self, dataset: torch.utils.data.Subset, labels: List):
+        self.dataset = dataset
+        self.label_map = {
+            old_label: new_label for new_label, old_label in enumerate(labels)
+        }
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        data, label = self.dataset[idx]  # type: ignore
+        new_label = self.label_map.get(label, label)
+        return data, new_label
 
 
 class ImageNetSplit(ImageNet):
@@ -19,7 +32,7 @@ class ImageNetSplit(ImageNet):
                        If None, uses the full dataset.
         split_name: Name of the split (used for directory naming).
         """
-        self.split_labels = split_labels 
+        self.split_labels = split_labels
         self.split_name = split_name
         super().__init__(**kwargs)
 
@@ -27,14 +40,17 @@ class ImageNetSplit(ImageNet):
         return f"imagenet_{self.split_name}"
 
     def populate_train(self):
-        traindir = os.path.join(self.location, "train")
+        traindir = os.path.join(self.location, "imagenet", "train")
         full_dataset = ImageFolderWithPaths(traindir, transform=self.preprocess)
         if self.split_labels is not None:
             split_indices = [
                 idx for idx, (_, label) in enumerate(full_dataset.samples)
                 if label in self.split_labels
             ]
-            self.train_dataset = Subset(full_dataset, split_indices)
+            self.train_dataset = RemapLabels(
+                Subset(full_dataset, split_indices),
+                self.split_labels
+            )
         else:
             self.train_dataset = full_dataset
 
@@ -49,14 +65,17 @@ class ImageNetSplit(ImageNet):
         )
 
     def populate_test(self):
-        testdir = os.path.join(self.location, "val")
+        testdir = os.path.join(self.location, "imagenet", "val")
         full_dataset = ImageFolderWithPaths(testdir, transform=self.preprocess)
         if self.split_labels is not None:
             split_indices = [
                 idx for idx, (_, label) in enumerate(full_dataset.samples)
                 if label in self.split_labels
             ]
-            self.test_dataset = Subset(full_dataset, split_indices)
+            self.test_dataset = RemapLabels(
+                Subset(full_dataset, split_indices),
+                self.split_labels
+            )
         else:
             self.test_dataset = full_dataset
 
