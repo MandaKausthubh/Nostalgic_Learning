@@ -1,6 +1,6 @@
 import torch
 from torchvision import transforms, datasets
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from dataclasses import dataclass
 from typing import Optional, Dict
 
@@ -8,7 +8,7 @@ from utils_new.accumulate import accumulate_hessian_eigenspace
 from utils_new.ortho_accumulate import update_Q_lambda_union
 from utils_new.hessian import compute_Q_for_task
 
-from datasets import ImageNet2p, ImageNetA, ImageNetR, ImageNetV2
+from datasets import ImageNet2p, ImageNetA, ImageNetR, ImageNetV2, ImageNet
 
 from models.vit32 import ImageClassifierViT
 from tqdm import tqdm
@@ -286,47 +286,12 @@ class NostalgiaExperiment:
         # }
 
         # Using ImageNet variants as datasets
-        imagenet2p_dataset = ImageNet2p(self.transform, self.config.root_dir, self.config.batch_size, self.config.num_workers)
-        imagenet2p_train_loader = imagenet2p_dataset.train_loader
-        imagenet2p_val_loader = imagenet2p_dataset.test_loader
 
-        imagenet_a_dataset = ImageNetA(self.transform, self.config.root_dir, self.config.batch_size, self.config.num_workers)
-        imagenet_a_train_loader = imagenet_a_dataset.train_loader
-        imagenet_a_val_loader = imagenet_a_dataset.test_loader
+        self.dataset_lengths = {}
 
-        imagenet_r_dataset = ImageNetR(self.transform, self.config.root_dir, self.config.batch_size, self.config.num_workers)
-        imagenet_r_train_loader = imagenet_r_dataset.train_loader
-        imagenet_r_val_loader = imagenet_r_dataset.test_loader
-
-        imagenet_v2_dataset = ImageNetV2(self.transform, self.config.root_dir, self.config.batch_size, self.config.num_workers)
-        imagenet_v2_train_loader = imagenet_v2_dataset.train_loader
-        imagenet_v2_val_loader = imagenet_v2_dataset.test_loader
-
-        self.datasets = {
-            'ImageNet2p': (imagenet2p_train_loader, imagenet2p_val_loader),
-            'ImageNetA': (imagenet_a_train_loader, imagenet_a_val_loader),
-            'ImageNetR': (imagenet_r_train_loader, imagenet_r_val_loader),
-            'ImageNetV2': (imagenet_v2_train_loader, imagenet_v2_val_loader),
-        }
-
-        self.order_of_tasks = ['ImageNet2p', 'ImageNetA', 'ImageNetR', 'ImageNetV2']
-
-        self.dataset_num_classes = {
-            'ImageNet2p': 1000,
-            'ImageNetA': 1000,
-            'ImageNetR': 1000,
-            'ImageNetV2': 1000,
-        }
-
-        self.epochs_per_task = {
-            'ImageNet2p': 5,
-            'ImageNetA': 5,
-            'ImageNetR': 5,
-            'ImageNetV2': 5,
-        }
-
-        for task_name in self.datasets.keys():
-            self.imageClassifier.add_task(task_name, self.dataset_num_classes[task_name])
+        imagenet = ImageNet(self.transform, self.config.root_dir, self.config.batch_size, self.config.num_workers)
+        imagenet_train_loader = imagenet.train_loader
+        imagenet_val_loader = imagenet.test_loader
 
 
 
@@ -392,8 +357,8 @@ class NostalgiaExperiment:
                 total_loss += loss.item() * input.size(0)
                 accuracy += (output.argmax(dim=1) == target).sum().item()
 
-        loss = total_loss / len(val_loader.dataset) #type: ignore
-        accuracy = accuracy / len(val_loader.dataset) #type: ignore
+        loss = total_loss / self.dataset_lengths[task_name] #type: ignore
+        accuracy = accuracy / self.dataset_lengths[task_name] #type: ignore
 
         self.writer.add_scalar( f'{task_name}/validation_loss', loss, iteration)
         self.writer.add_scalar( f'{task_name}/validation_accuracy', accuracy, iteration)

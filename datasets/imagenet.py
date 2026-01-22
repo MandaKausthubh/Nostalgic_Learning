@@ -1,6 +1,7 @@
 import os
 import torch
 from torch.utils.data import SubsetRandomSampler
+from torch.utils.data import Subset
 import numpy as np
 
 from .common import ImageFolderWithPaths, SubsetSampler
@@ -174,3 +175,51 @@ class ImageNet2pShuffled(ImageNet):
         idxs = idxs.astype('int')
         sampler = SubsetRandomSampler(np.where(idxs)[0])
         return sampler
+
+
+
+
+class ImageNetClassIncremental(ImageNetSubsampleValClasses):
+    def __init__(self, start_class, end_class, *args, **kwargs):
+        self.start_class = start_class
+        self.end_class = end_class
+        super().__init__(*args, **kwargs)  # This will call get_class_sublist_and_mask and set classnames
+
+    def get_class_sublist_and_mask(self):
+        class_sublist = list(range(self.start_class, self.end_class))
+        class_sublist_mask = [i in class_sublist for i in range(1000)]
+        return class_sublist, class_sublist_mask
+
+    def get_train_sampler(self):
+        # After train_dataset is loaded in populate_train, filter indices by targets in sublist
+        if hasattr(self, 'train_dataset') and hasattr(self.train_dataset, 'targets'):
+            indices = [idx for idx, target in enumerate(self.train_dataset.targets) if target in self.class_sublist]
+        else:
+            raise ValueError("train_dataset must be loaded before calling get_train_sampler")
+
+        if self.distributed:
+            subset = Subset(self.train_dataset, indices)
+            return torch.utils.data.distributed.DistributedSampler(subset)
+        else:
+            return SubsetRandomSampler(indices)
+
+# Task-specific classes
+class ImageNetTask1(ImageNetClassIncremental):
+    def __init__(self, *args, **kwargs):
+        super().__init__(start_class=0, end_class=200, *args, **kwargs)
+
+class ImageNetTask2(ImageNetClassIncremental):
+    def __init__(self, *args, **kwargs):
+        super().__init__(start_class=200, end_class=400, *args, **kwargs)
+
+class ImageNetTask3(ImageNetClassIncremental):
+    def __init__(self, *args, **kwargs):
+        super().__init__(start_class=400, end_class=600, *args, **kwargs)
+
+class ImageNetTask4(ImageNetClassIncremental):
+    def __init__(self, *args, **kwargs):
+        super().__init__(start_class=600, end_class=800, *args, **kwargs)
+
+class ImageNetTask5(ImageNetClassIncremental):
+    def __init__(self, *args, **kwargs):
+        super().__init__(start_class=800, end_class=1000, *args, **kwargs)
