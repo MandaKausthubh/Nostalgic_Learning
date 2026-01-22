@@ -86,7 +86,6 @@ class ImageNetSplit(ImageNet):
         return torch.tensor(projected, dtype=torch.long, device=device)
 
     # If you want to override classnames (for logging/display)
-    @property
     def classnames(self):
         base_names = get_classnames('openai')  # or whatever your base uses
         return [base_names[i] for i in self.class_indices]
