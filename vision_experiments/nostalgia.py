@@ -500,28 +500,55 @@ class NostalgiaExperiment:
 
             if self.config.mode == "nostalgia":
                 # After training on the current task, compute the Hessian eigenspace
-                Q_curr, Lambda_curr = compute_Q_for_task(
-                    model=self.imageClassifier,
-                    train_loader=train_loader,
-                    device=self.config.device,
-                    k=self.config.hessian_eigenspace_dim
-                )
+                if self.config.device == 'cuda':
+                    with torch.backends.cuda.sdp_kernel(
+                        enable_flash=False, enable_mem_efficient=False, enable_math=True
+                    ):
+                        Q_curr, Lambda_curr = compute_Q_for_task(
+                            model=self.imageClassifier,
+                            train_loader=train_loader,
+                            device=self.config.device,
+                            k=self.config.hessian_eigenspace_dim
+                        )
 
-                if self.config.accumulate_mode == 'union':
-                    print("Updating Hessian eigenspace using union method.")
-                    Q_prev, Lambda_prev = update_Q_lambda_union(
-                        Q_prev, Lambda_prev,
-                        Q_curr, Lambda_curr,
-                        k_max=self.config.hessian_eigenspace_dim * 20
-                    )
-                elif self.config.accumulate_mode == 'accumulate':
-                    Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
-                        Q_prev, Lambda_prev,
-                        Q_curr, Lambda_curr,
-                        t=task_counter, k=self.config.hessian_eigenspace_dim
-                    )
+                        if self.config.accumulate_mode == 'union':
+                            print("Updating Hessian eigenspace using union method.")
+                            Q_prev, Lambda_prev = update_Q_lambda_union(
+                                Q_prev, Lambda_prev,
+                                Q_curr, Lambda_curr,
+                                k_max=self.config.hessian_eigenspace_dim * 20
+                            )
+                        elif self.config.accumulate_mode == 'accumulate':
+                            Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
+                                Q_prev, Lambda_prev,
+                                Q_curr, Lambda_curr,
+                                t=task_counter, k=self.config.hessian_eigenspace_dim
+                            )
+                        else:
+                            raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
                 else:
-                    raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
+                    Q_curr, Lambda_curr = compute_Q_for_task(
+                        model=self.imageClassifier,
+                        train_loader=train_loader,
+                        device=self.config.device,
+                        k=self.config.hessian_eigenspace_dim
+                    )
+
+                    if self.config.accumulate_mode == 'union':
+                        print("Updating Hessian eigenspace using union method.")
+                        Q_prev, Lambda_prev = update_Q_lambda_union(
+                            Q_prev, Lambda_prev,
+                            Q_curr, Lambda_curr,
+                            k_max=self.config.hessian_eigenspace_dim * 20
+                        )
+                    elif self.config.accumulate_mode == 'accumulate':
+                        Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
+                            Q_prev, Lambda_prev,
+                            Q_curr, Lambda_curr,
+                            t=task_counter, k=self.config.hessian_eigenspace_dim
+                        )
+                    else:
+                        raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
 
                 if self.config.reset_lora:
                     self.imageClassifier._merge_and_unload_peft()
