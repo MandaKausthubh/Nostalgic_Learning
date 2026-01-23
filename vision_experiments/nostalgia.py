@@ -504,6 +504,7 @@ class NostalgiaExperiment:
                     with torch.backends.cuda.sdp_kernel(
                         enable_flash=False, enable_mem_efficient=False, enable_math=True
                     ):
+                        self.imageClassifier.set_active_task(task_name)
                         Q_curr, Lambda_curr = compute_Q_for_task(
                             model=self.imageClassifier,
                             train_loader=train_loader,
