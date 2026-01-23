@@ -378,7 +378,7 @@ class NostalgiaExperiment:
                     progress_bar.set_postfix({'loss': loss.item()})
 
             # Validate after each epoch
-            self.validate_dataset(val_loader, criterion, iteration=epoch, task_name=task_name)
+            # self.validate_dataset(val_loader, criterion, iteration=epoch, task_name=task_name)
 
         for param in self.imageClassifier.backbone.parameters():
             param.requires_grad = True
@@ -439,13 +439,10 @@ class NostalgiaExperiment:
 
         self.retrain_task_head(task_name, epochs=self.config.head_warmup_epochs)
 
-        if log_deltas:
-            optimizer = self.imageClassifier.configure_optimizers(
-                writter=self.writer,
-                iteration=starting_step
-            )
-        else:
-            optimizer = self.imageClassifier.configure_optimizers()
+        optimizer = self.imageClassifier.configure_optimizers(
+            writter=self.writer if log_deltas else None,
+            iteration=starting_step
+        )
 
         for epoch in range(epochs):
             for input, target in tqdm((train_loader), desc=f"{epoch}. Training on {task_name}", ncols=80):
