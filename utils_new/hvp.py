@@ -66,7 +66,7 @@ class HessianVectorProduct:
             loss,
             self.params,
             create_graph=True,
-            retain_graph=False,
+            retain_graph=True,
         )
 
 
