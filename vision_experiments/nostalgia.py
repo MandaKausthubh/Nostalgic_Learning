@@ -500,6 +500,7 @@ class NostalgiaExperiment:
 
     def train(self, erase_past=False):
         self.prepare_all_datasets()
+        torch.cuda.empty_cache()
 
         Q_prev, Lambda_prev = None, None
 
