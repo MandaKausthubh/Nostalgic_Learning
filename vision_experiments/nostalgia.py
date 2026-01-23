@@ -358,7 +358,8 @@ class NostalgiaExperiment:
 
         for epoch in range(epochs):
             step = 0
-            for input, target in tqdm(train_loader, ncols=120, desc=f"Epoch {epoch}. Retraining head for {task_name}"):
+            progress_bar = tqdm(train_loader, ncols=120, desc=f"Epoch {epoch}. Retraining head for {task_name}")
+            for input, target in progress_bar:
                 self.imageClassifier.train()
                 input, target = input.to(self.config.device), target.to(self.config.device)
                 input = self.imageClassifier.preprocess_inputs(input)
@@ -369,7 +370,7 @@ class NostalgiaExperiment:
                 loss.backward()
                 optimizer.step()
                 if step % 50 == 0:
-                    tqdm.write(f"Loss: {loss.item():.4f}")
+                    progress_bar.set_postfix({'loss': loss.item()})
 
             # Validate after each epoch
             self.validate_dataset(val_loader, criterion, iteration=epoch, task_name=task_name)
