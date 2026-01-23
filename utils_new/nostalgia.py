@@ -107,6 +107,7 @@ class NostalgiaOptimizer(Optimizer):
             #         for p in self.projection_params:
             #             if p.grad is not None:
             #                 p.grad.add_(decay * p.data)
+
             g = self._flatten_grads()
 
             # Q^T g
