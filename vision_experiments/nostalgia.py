@@ -633,7 +633,7 @@ if __name__ == "__main__":
         l2sp_lambda=args.l2sp_lambda,
         reset_lora=args.reset_lora,
         accumulate_mode=args.accumulate_mode,
-        iterations_of_accumulation=args.iterations_of_accumulation,
+        iterations_of_accumulation=args.iterations_of_accumulate,
         log_deltas=args.log_deltas,
         use_scaling=args.use_scaling,
         adapt_downstream_tasks=args.adapt_downstream_tasks,
