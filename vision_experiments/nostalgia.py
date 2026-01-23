@@ -58,8 +58,8 @@ def get_args():
     parser.add_argument('--log_deltas', type=str2bool, default=True, help='Whether to log parameter deltas during training')
     parser.add_argument('--use_scaling', type=str2bool, default=False, help='Whether to use scaling for Hessian eigenspace')
     parser.add_argument('--adapt_downstream_tasks', type=str2bool, default=False, help='Whether to adapt downstream tasks using nostalgia method')
-    parser.add_argument('--num_workers', type=int, default=4, help='Number of workers for data loading')
-    parser.add_argument('--head_warmup_epochs', type=int, default=5, help='Number of epochs to warm up task heads during validation')
+    parser.add_argument('--num_workers', type=int, default=8, help='Number of workers for data loading')
+    parser.add_argument('--head_warmup_epochs', type=int, default=2, help='Number of epochs to warm up task heads during validation')
     return parser.parse_args()
 
 
@@ -354,7 +354,7 @@ class NostalgiaExperiment:
         print("Retraining task head for", task_name)
 
         for epoch in range(epochs):
-            for input, target in tqdm(train_loader, ncols=160, desc=f"Epoch {epoch}. Retraining head for {task_name}"):
+            for input, target in tqdm(train_loader, ncols=120, desc=f"Epoch {epoch}. Retraining head for {task_name}"):
                 self.imageClassifier.train()
                 input, target = input.to(self.config.device), target.to(self.config.device)
                 input = self.imageClassifier.preprocess_inputs(input)
