@@ -58,11 +58,11 @@ class ImageNetSplit(ImageNet):
                 idx for idx, (_, label) in enumerate(full_dataset.samples)
                 if label in self.split_labels
             ]
-            # self.train_dataset = RemapLabels(
-            #     Subset(full_dataset, split_indices),
-            #     self.split_labels
-            # )
-            self.train_dataset = OutPutSimplifier(Subset(full_dataset, split_indices))
+            self.train_dataset = RemapLabels(
+                Subset(full_dataset, split_indices),
+                self.split_labels
+            )
+            # self.train_dataset = OutPutSimplifier(Subset(full_dataset, split_indices))
         else:
             self.train_dataset = OutPutSimplifier(full_dataset)
 
@@ -84,11 +84,11 @@ class ImageNetSplit(ImageNet):
                 idx for idx, (_, label) in enumerate(full_dataset.samples)
                 if label in self.split_labels
             ]
-            # self.test_dataset = RemapLabels(
-            #     Subset(full_dataset, split_indices),
-            #     self.split_labels
-            # )
-            self.test_dataset = OutPutSimplifier(Subset(full_dataset, split_indices))
+            self.test_dataset = RemapLabels(
+                Subset(full_dataset, split_indices),
+                self.split_labels
+            )
+            # self.test_dataset = OutPutSimplifier(Subset(full_dataset, split_indices))
         else:
             self.test_dataset = OutPutSimplifier(full_dataset)
 
