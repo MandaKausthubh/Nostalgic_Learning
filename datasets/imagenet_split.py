@@ -19,6 +19,17 @@ class RemapLabels(torch.utils.data.Dataset):
         new_label = self.label_map.get(label, label)
         return data, new_label
 
+class OutPutSimplifier(torch.utils.data.Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)  # type: ignore
+
+    def __getitem__(self, idx):
+        data, label = self.dataset[idx]['images'], self.dataset[idx]['labels']  # type: ignore
+        return data, label
+
 
 class ImageNetSplit(ImageNet):
     def __init__(
@@ -51,9 +62,9 @@ class ImageNetSplit(ImageNet):
             #     Subset(full_dataset, split_indices),
             #     self.split_labels
             # )
-            self.train_dataset = Subset(full_dataset, split_indices)
+            self.train_dataset = OutPutSimplifier(Subset(full_dataset, split_indices))
         else:
-            self.train_dataset = full_dataset
+            self.train_dataset = OutPutSimplifier(full_dataset)
 
         self.sampler = self.get_train_sampler()
         self.train_loader = torch.utils.data.DataLoader(
@@ -77,9 +88,9 @@ class ImageNetSplit(ImageNet):
             #     Subset(full_dataset, split_indices),
             #     self.split_labels
             # )
-            self.test_dataset = Subset(full_dataset, split_indices)
+            self.test_dataset = OutPutSimplifier(Subset(full_dataset, split_indices))
         else:
-            self.test_dataset = full_dataset
+            self.test_dataset = OutPutSimplifier(full_dataset)
 
         self.test_loader = torch.utils.data.DataLoader(
             self.test_dataset,
