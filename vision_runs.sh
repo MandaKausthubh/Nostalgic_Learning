@@ -27,7 +27,7 @@
 #
 #
 
-python train.py \
+python -m vision_experiments.nostalgia \
     --mode "nostalgia" \
     --root_dir "~/data" \
     --batch_size 64 \
