@@ -37,6 +37,8 @@ def get_args():
     parser.add_argument('--batch_size', type=int, default=256, help='Batch size for training')
     parser.add_argument('--batch_size_for_accumulate', type=int, default=8, help='Batch size for training')
     parser.add_argument('--learning_rate', type=float, default=5e-4, help='Learning rate for optimizer')
+    parser.add_argument('--downstream_learning_rate', type=float, default=1e-2, help='Learning rate for downstream tasks')
+    parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weighted decay rate for optimizer')
     parser.add_argument('--device', type=str, default='mps', help='Device to use for training (e.g., cpu, cuda, mps)',
                         choices=['cpu', 'cuda', 'mps'])
     parser.add_argument('--hessian_eigenspace_dim', type=int, default=32, help='Dimension of Hessian eigenspace')
@@ -48,7 +50,6 @@ def get_args():
     parser.add_argument('--lora_alpha', type=int, default=16, help='LoRA alpha parameter')
     parser.add_argument('--lora_dropout', type=float, default=0.1, help='LoRA dropout rate')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
-    parser.add_argument('--nostalgia_dimension', type=int, default=16, help='Dimension of Hessian low-rank for nostalgia method')
     parser.add_argument('--ewc_lambda', type=float, default=1e-3, help='EWC regularization strength')
     parser.add_argument('--l2sp_lambda', type=float, default=1e-4, help='L2-SP regularization strength')
     parser.add_argument('--reset_lora', type=str2bool, default=False, help='Whether to reset LoRA parameters before training each task')
@@ -74,6 +75,8 @@ class NostalgiaConfig:
     batch_size: int = 64
     batch_size_for_accumulation: int = 16
     learning_rate: float = 1e-4
+    downstream_learning_rate: float = 1e-2
+    weight_decay: float = 1e-4
     device: str = 'mps'
     validate_after_steps: int = 10
     log_deltas: bool = True
@@ -137,6 +140,8 @@ class NostalgiaExperiment:
             lora_dropout=self.config.lora_dropout,
             lora_modules=self.config.lora_modules,
             use_nostalgia=using_nostalgia,
+            weight_decay=self.config.weight_decay,
+            downstream_learning_rate=self.config.downstream_learning_rate,
         ).to(self.config.device)
         self.writer = SummaryWriter(log_dir=self.config.log_dir)
         self.finished_datasets = []
@@ -633,6 +638,8 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         batch_size_for_accumulation=args.batch_size_for_accumulate,
         learning_rate=args.learning_rate,
+        downstream_learning_rate=args.downstream_learning_rate,
+        weight_decay=args.weight_decay,
         device=args.device,
         hessian_eigenspace_dim=args.hessian_eigenspace_dim,
         validate_after_steps=args.validate_after_steps,

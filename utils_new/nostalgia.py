@@ -20,6 +20,7 @@ class NostalgiaOptimizer(Optimizer):
         writter: Optional[Any] = None,
         starting_step: int = 0,
         log_every: int = 50,
+        weight_decay: float = 1e-4,
     ):
         super().__init__(params, {})  # Dummy call to satisfy Optimizer base class
         # Important: we do NOT pass params to super(); base_optimizer owns them
@@ -28,6 +29,7 @@ class NostalgiaOptimizer(Optimizer):
         self.projection_params = list(params)
         self.device = device
         self.dtype = dtype
+        self.manual_weight_decay = weight_decay
 
         self.nostalgia_Q: Optional[torch.Tensor] = None
         self.scaling: Optional[torch.Tensor] = None
@@ -42,6 +44,7 @@ class NostalgiaOptimizer(Optimizer):
         self.param_numels = [p.numel() for p in self.projection_params]
         self.num_params = sum(self.param_numels)
         self.k_max: Optional[int] = None
+        self.manual_weight_decay: float = 1e-4
 
         # New list of hessian eigenvectors and eigenvalues
         # self.nostalgia_Q: List[torch.Tensor] = []
@@ -97,6 +100,13 @@ class NostalgiaOptimizer(Optimizer):
     @torch.no_grad()
     def step(self, closure: Optional[Any] = None): #type: ignore
         if self.nostalgia_Q is not None:
+
+            if self.base_optimizer.param_groups[0].get("weight_decay", 0.0) == 0.0:
+                decay = self.manual_weight_decay
+                if decay > 0:
+                    for p in self.projection_params:
+                        if p.grad is not None:
+                            p.grad.add_(decay * p.data)
             g = self._flatten_grads()
 
             # Q^T g

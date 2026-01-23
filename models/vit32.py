@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 import pytorch_lightning as pl
 
-from peft import get_peft_model, LoraConfig, get_peft_model_state_dict
+from peft import get_peft_model, LoraConfig
 
 from utils_new.nostalgia import NostalgiaOptimizer
 
@@ -34,6 +34,8 @@ class ImageClassifierViT(pl.LightningModule):
     def __init__(
         self,
         learning_rate=0.001,
+        weight_decay=0.0,
+        downstream_learning_rate=0.01,
         lora_r=8,
         lora_alpha=16,
         lora_dropout=0.1,
@@ -76,6 +78,8 @@ class ImageClassifierViT(pl.LightningModule):
         # Loss and optimizer params
         self.criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
         self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.downstream_learning_rate = downstream_learning_rate
 
     def preprocess_inputs(self, x):
         if self.use_preocessor:
@@ -226,9 +230,9 @@ class ImageClassifierViT(pl.LightningModule):
         base_optimizer = torch.optim.AdamW(
             [
                 {"params": backbone_params, "lr": self.learning_rate},
-                {"params": head_params, "lr": self.learning_rate*100},
+                {"params": head_params, "lr": self.downstream_learning_rate},
             ],
-            # weight_decay=1e-2,
+            weight_decay=0.0,
         )
 
         # base_optimizer = torch.optim.SGD(
@@ -252,7 +256,8 @@ class ImageClassifierViT(pl.LightningModule):
             device=self.device,
             dtype=backbone_params[0].dtype,
             writter=writter,
-            starting_step=iteration
+            starting_step=iteration,
+            weight_decay=self.weight_decay,
         )
 
         if self.nostalgia_Q is not None:
