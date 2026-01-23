@@ -351,8 +351,10 @@ class NostalgiaExperiment:
             lr=self.config.learning_rate
         )
 
+        print("Retraining task head for", task_name)
+
         for epoch in range(epochs):
-            for input, target in train_loader:
+            for input, target in tqdm(train_loader, ncols=80, desc=f"Epoch {epoch}. Retraining head for {task_name}"):
                 self.imageClassifier.train()
                 input, target = input.to(self.config.device), target.to(self.config.device)
                 input = self.imageClassifier.preprocess_inputs(input)
