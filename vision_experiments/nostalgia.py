@@ -1,6 +1,6 @@
 import torch
-from torchvision import transforms, datasets
-from torch.utils.data import DataLoader, random_split
+from torchvision import transforms
+from torch.utils.data import DataLoader
 from dataclasses import dataclass
 from typing import Optional, Dict
 
@@ -35,6 +35,7 @@ def get_args():
                         choices=['nostalgia', 'l2sp', 'EWC', 'Adam'])
     parser.add_argument('--root_dir', type=str, default='/Users/mandakausthubh/data', help='Root directory for datasets')
     parser.add_argument('--batch_size', type=int, default=128, help='Batch size for training')
+    parser.add_argument('--batch_size_for_accumulate', type=int, default=8, help='Batch size for training')
     parser.add_argument('--learning_rate', type=float, default=5e-4, help='Learning rate for optimizer')
     parser.add_argument('--device', type=str, default='mps', help='Device to use for training (e.g., cpu, cuda, mps)',
                         choices=['cpu', 'cuda', 'mps'])
@@ -53,6 +54,7 @@ def get_args():
     parser.add_argument('--reset_lora', type=str2bool, default=False, help='Whether to reset LoRA parameters before training each task')
     parser.add_argument('--accumulate_mode', type=str, default='union', help='Mode for accumulating Hessian eigenspaces',
                         choices=['accumulate', 'union'])
+    parser.add_argument('--iterations_of_accumulation', type=int, default=5, help='Number of iterations for accumulating Hessian eigenspace')
     parser.add_argument('--log_deltas', type=str2bool, default=True, help='Whether to log parameter deltas during training')
     parser.add_argument('--use_scaling', type=str2bool, default=False, help='Whether to use scaling for Hessian eigenspace')
     parser.add_argument('--adapt_downstream_tasks', type=str2bool, default=False, help='Whether to adapt downstream tasks using nostalgia method')
@@ -69,6 +71,8 @@ class NostalgiaConfig:
     seed: int = 42
     root_dir: str = '/Users/mandakausthubh/data'
     batch_size: int = 64
+    batch_size_for_accumulation: int = 16
+    accumulate_batch_size: int = 8
     learning_rate: float = 1e-4
     device: str = 'mps'
     validate_after_steps: int = 10
@@ -87,6 +91,7 @@ class NostalgiaConfig:
     reset_lora: bool = True
 
     accumulate_mode: str = 'accumulate'  # or 'union'
+    iterations_of_accumulation: int = 5
     use_scaling: bool = True
     adapt_downstream_tasks: bool = False
     log_dir: str = f'./logs/nostalgia_vision_experiment/{mode}/{learning_rate}/{lora_r}/{hessian_eigenspace_dim}/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
@@ -293,10 +298,24 @@ class NostalgiaExperiment:
             batch_size=self.config.batch_size,
             num_workers=self.config.num_workers
         )
+
+        dataset_splits_for_accumulate = get_imagenet_split(
+            location=self.config.root_dir,
+            preprocess=self.transform,
+            batch_size=self.config.batch_size_for_accumulation,
+            num_workers=self.config.num_workers
+        )
+
         self.datasets = {
             f'ImageNet/Split{i}': (dataset.train_loader, dataset.test_loader) 
             for i, dataset in enumerate(dataset_splits, start=1)
         }
+
+        self.dataset_for_accumulate = {
+            f'ImageNet/Split{i}': (dataset.train_loader, dataset.test_loader)
+            for i, dataset in enumerate(dataset_splits_for_accumulate, start=1)
+        }
+
         self.order_of_tasks = [f'ImageNet/Split{i}' for i in range(1, len(dataset_splits)+1)]
         self.dataset_num_classes = {
             task_name: 1000 for i, task_name in enumerate(self.order_of_tasks, start=1)  # hard coding this
@@ -505,12 +524,35 @@ class NostalgiaExperiment:
                         enable_flash=False, enable_mem_efficient=False, enable_math=True
                     ):
                         self.imageClassifier.set_active_task(task_name)
-                        Q_curr, Lambda_curr = compute_Q_for_task(
-                            model=self.imageClassifier,
-                            train_loader=train_loader,
-                            device=self.config.device,
-                            k=self.config.hessian_eigenspace_dim
-                        )
+                        Q_curr, Lambda_curr = None, None
+
+                        assert self.config.iterations_of_accumulation >= 1, "iterations_of_accumulation must be at least 1"
+
+                        for _ in range(self.config.iterations_of_accumulation):
+                            Q_new, Lambda_new = compute_Q_for_task(
+                                model=self.imageClassifier,
+                                train_loader=self.dataset_for_accumulate[task_name][0],
+                                device=self.config.device,
+                                k=self.config.hessian_eigenspace_dim
+                            )
+
+                            if self.config.accumulate_mode == 'union':
+                                print("Updating Hessian eigenspace using union method.")
+                                Q_curr, Lambda_curr = update_Q_lambda_union(
+                                    Q_curr, Lambda_curr,
+                                    Q_new, Lambda_new,
+                                    k_max=self.config.hessian_eigenspace_dim * 20
+                                )
+                            elif self.config.accumulate_mode == 'accumulate':
+                                Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
+                                    Q_curr, Lambda_curr,
+                                    Q_new, Lambda_new,
+                                    t=task_counter, k=self.config.hessian_eigenspace_dim
+                                )
+                            else:
+                                raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
+
+                        assert Q_curr is not None and Lambda_curr is not None, "Q_curr and Lambda_curr should not be None after accumulation."
 
                         if self.config.accumulate_mode == 'union':
                             print("Updating Hessian eigenspace using union method.")
@@ -576,6 +618,7 @@ if __name__ == "__main__":
         mode=args.mode,
         root_dir=args.root_dir,
         batch_size=args.batch_size,
+        batch_size_for_accumulation=args.batch_size_for_accumulate,
         learning_rate=args.learning_rate,
         device=args.device,
         hessian_eigenspace_dim=args.hessian_eigenspace_dim,
@@ -589,6 +632,7 @@ if __name__ == "__main__":
         l2sp_lambda=args.l2sp_lambda,
         reset_lora=args.reset_lora,
         accumulate_mode=args.accumulate_mode,
+        iterations_of_accumulation=args.iterations_of_accumulation,
         log_deltas=args.log_deltas,
         use_scaling=args.use_scaling,
         adapt_downstream_tasks=args.adapt_downstream_tasks,
