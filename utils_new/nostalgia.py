@@ -101,12 +101,12 @@ class NostalgiaOptimizer(Optimizer):
     def step(self, closure: Optional[Any] = None): #type: ignore
         if self.nostalgia_Q is not None:
 
-            if self.base_optimizer.param_groups[0].get("weight_decay", 0.0) == 0.0:
-                decay = self.manual_weight_decay
-                if decay > 0:
-                    for p in self.projection_params:
-                        if p.grad is not None:
-                            p.grad.add_(decay * p.data)
+            # if self.base_optimizer.param_groups[0].get("weight_decay", 0.0) == 0.0:
+            #     decay = self.manual_weight_decay
+            #     if decay > 0:
+            #         for p in self.projection_params:
+            #             if p.grad is not None:
+            #                 p.grad.add_(decay * p.data)
             g = self._flatten_grads()
 
             # Q^T g
