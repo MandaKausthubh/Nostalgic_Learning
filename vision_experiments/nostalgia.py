@@ -54,11 +54,12 @@ def get_args():
     parser.add_argument('--reset_lora', type=str2bool, default=False, help='Whether to reset LoRA parameters before training each task')
     parser.add_argument('--accumulate_mode', type=str, default='union', help='Mode for accumulating Hessian eigenspaces',
                         choices=['accumulate', 'union'])
-    parser.add_argument('--iterations_of_accumulation', type=int, default=5, help='Number of iterations for accumulating Hessian eigenspace')
+    parser.add_argument('--iterations_of_accumulate', type=int, default=5, help='Number of iterations for accumulating Hessian eigenspace')
     parser.add_argument('--log_deltas', type=str2bool, default=True, help='Whether to log parameter deltas during training')
     parser.add_argument('--use_scaling', type=str2bool, default=False, help='Whether to use scaling for Hessian eigenspace')
     parser.add_argument('--adapt_downstream_tasks', type=str2bool, default=False, help='Whether to adapt downstream tasks using nostalgia method')
     parser.add_argument('--num_workers', type=int, default=4, help='Number of workers for data loading')
+    parser.add_argument('--head_warmup_epochs', type=int, default=5, help='Number of epochs to warm up task heads during validation')
     return parser.parse_args()
 
 
@@ -72,7 +73,6 @@ class NostalgiaConfig:
     root_dir: str = '/Users/mandakausthubh/data'
     batch_size: int = 64
     batch_size_for_accumulation: int = 16
-    accumulate_batch_size: int = 8
     learning_rate: float = 1e-4
     device: str = 'mps'
     validate_after_steps: int = 10
@@ -89,6 +89,7 @@ class NostalgiaConfig:
     ewc_lambda: float = 1e-4
     l2sp_lambda: float = 1e-4
     reset_lora: bool = True
+    head_warmup_epochs: int = 5
 
     accumulate_mode: str = 'accumulate'  # or 'union'
     iterations_of_accumulation: int = 5
@@ -428,6 +429,7 @@ class NostalgiaExperiment:
         else:
             optimizer = self.imageClassifier.configure_optimizers()
 
+        self.retrain_task_head(task_name, epochs=self.config.head_warmup_epochs)
 
         for epoch in range(epochs):
             for input, target in tqdm((train_loader), desc=f"{epoch}. Training on {task_name}", ncols=80):
@@ -571,7 +573,7 @@ class NostalgiaExperiment:
                 else:
                     Q_curr, Lambda_curr = compute_Q_for_task(
                         model=self.imageClassifier,
-                        train_loader=train_loader,
+                        train_loader=self.dataset_for_accumulate[task_name][0],
                         device=self.config.device,
                         k=self.config.hessian_eigenspace_dim
                     )
@@ -636,6 +638,7 @@ if __name__ == "__main__":
         use_scaling=args.use_scaling,
         adapt_downstream_tasks=args.adapt_downstream_tasks,
         num_workers=args.num_workers,
+        head_warmup_epochs=args.head_warmup_epochs,
     )
 
     config.log_dir = f'./logs/nostalgia_vision_experiment/{config.mode}/{config.learning_rate}/{config.lora_r}/{config.hessian_eigenspace_dim}/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'

@@ -74,7 +74,7 @@ class ImageClassifierViT(pl.LightningModule):
         self.nostalgia_scaling: Optional[torch.Tensor] = None
 
         # Loss and optimizer params
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
         self.learning_rate = learning_rate
 
     def preprocess_inputs(self, x):
