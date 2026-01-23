@@ -481,16 +481,16 @@ class NostalgiaExperiment:
             print(f"\n\nStarting training on {task_name} for {epochs} epochs.")
 
             print(f"Using scaling: {self.config.use_scaling}")
-
-            total_steps = self.train_dataset(
-                task_name=task_name,
-                Q_prev=Q_prev,
-                scaling=Lambda_prev if self.config.use_scaling else None,   # TODO: Check this
-                starting_step=total_steps,
-                epochs=epochs,
-                log_deltas=self.config.log_deltas,
-                mode=self.config.mode,
-            )
+            if total_steps != 0:   # Adding this for debugging
+                total_steps = self.train_dataset(
+                    task_name=task_name,
+                    Q_prev=Q_prev,
+                    scaling=Lambda_prev if self.config.use_scaling else None,   # TODO: Check this
+                    starting_step=total_steps,
+                    epochs=epochs,
+                    log_deltas=self.config.log_deltas,
+                    mode=self.config.mode,
+                )
 
             if self.config.mode == "EWC":
                 fisher_information = self.imageClassifier.get_fisher_information(dataloader=train_loader)
