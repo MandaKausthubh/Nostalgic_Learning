@@ -121,7 +121,10 @@ class NostalgiaExperiment:
             transforms.RandomCrop(224, padding=16),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize([0.5]*3, [0.5]*3),
+            transforms.Normalize(
+                mean=(0.485, 0.456, 0.406),
+                std=(0.229, 0.224, 0.225),
+            ),
         ])
 
 
@@ -354,6 +357,7 @@ class NostalgiaExperiment:
         print("Retraining task head for", task_name)
 
         for epoch in range(epochs):
+            step = 0
             for input, target in tqdm(train_loader, ncols=120, desc=f"Epoch {epoch}. Retraining head for {task_name}"):
                 self.imageClassifier.train()
                 input, target = input.to(self.config.device), target.to(self.config.device)
@@ -364,9 +368,14 @@ class NostalgiaExperiment:
                 loss = criterion(output, target)
                 loss.backward()
                 optimizer.step()
+                if step % 50 == 0:
+                    tqdm.write(f"Loss: {loss.item():.4f}")
 
             # Validate after each epoch
             self.validate_dataset(val_loader, criterion, iteration=epoch, task_name=task_name)
+
+        for param in self.imageClassifier.backbone.parameters():
+            param.requires_grad = True
 
 
     def validate_dataset(

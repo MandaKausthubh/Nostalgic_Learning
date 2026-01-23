@@ -108,6 +108,8 @@ class ImageClassifierViT(pl.LightningModule):
 
     def add_task(self, task_name, num_classes):
         self.task_head_list[task_name] = nn.Linear(self.rep_dim, num_classes).to(self.device)
+        nn.init.trunc_normal_(self.task_head_list[task_name].weight, std=0.02)  # type: ignore
+        nn.init.zeros_(self.task_head_list[task_name].bias)                     # type: ignore
 
         for param in self.task_head_list[task_name].parameters():
             param.requires_grad = False
@@ -223,10 +225,9 @@ class ImageClassifierViT(pl.LightningModule):
 
         base_optimizer = torch.optim.AdamW(
             [
-                {"params": backbone_params},
-                {"params": head_params},
+                {"params": backbone_params, "lr": self.learning_rate},
+                {"params": head_params, "lr": self.learning_rate*100},
             ],
-            lr=self.learning_rate,
             # weight_decay=1e-2,
         )
 
