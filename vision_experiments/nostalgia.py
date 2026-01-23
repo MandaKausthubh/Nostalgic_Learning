@@ -437,6 +437,7 @@ class NostalgiaExperiment:
         criterion = self.imageClassifier.criterion
         niter = starting_step
 
+        self.retrain_task_head(task_name, epochs=self.config.head_warmup_epochs)
 
         if log_deltas:
             optimizer = self.imageClassifier.configure_optimizers(
@@ -445,8 +446,6 @@ class NostalgiaExperiment:
             )
         else:
             optimizer = self.imageClassifier.configure_optimizers()
-
-        self.retrain_task_head(task_name, epochs=self.config.head_warmup_epochs)
 
         for epoch in range(epochs):
             for input, target in tqdm((train_loader), desc=f"{epoch}. Training on {task_name}", ncols=80):
