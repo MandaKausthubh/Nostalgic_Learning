@@ -16,6 +16,8 @@ class RemapLabels(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         data, label = self.dataset[idx]['images'], self.dataset[idx]['labels']  # type: ignore
+        if label not in self.label_map:
+            raise RuntimeError(f"Label {label} not in label map.")
         new_label = self.label_map.get(label, label)
         return data, new_label
 
@@ -96,7 +98,7 @@ class ImageNetSplit(ImageNet):
             self.test_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            pin_memory=True,
+            pin_memory=False,
             sampler=self.get_test_sampler(),
         )
 
