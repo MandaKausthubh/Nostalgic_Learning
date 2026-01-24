@@ -56,6 +56,7 @@ class ImageNetSplit(ImageNet):
         traindir = os.path.join(self.location, "imagenet", "train")
         full_dataset = ImageFolderWithPaths(traindir, transform=self.preprocess)
         if self.split_labels is not None:
+            print(f"Creating ImageNet split with labels")
             split_indices = [
                 idx for idx, (_, label) in enumerate(full_dataset.samples)
                 if label in self.split_labels
@@ -66,6 +67,7 @@ class ImageNetSplit(ImageNet):
             )
             # self.train_dataset = OutPutSimplifier(Subset(full_dataset, split_indices))
         else:
+            print(f"Creating ImageNet split with all labels")
             self.train_dataset = OutPutSimplifier(full_dataset)
 
         self.sampler = self.get_train_sampler()
@@ -152,3 +154,7 @@ def get_imagenet_split(
         ImageNetSplitTask4(**kwargs),
         ImageNetSplitTask5(**kwargs),
     ]
+
+
+def test_if_labels_remapped_correctly(dataset):
+    from tqdm import tqdm
