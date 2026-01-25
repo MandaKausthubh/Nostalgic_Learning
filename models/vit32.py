@@ -42,6 +42,7 @@ class ImageClassifierViT(pl.LightningModule):
         use_peft=True,
         lora_modules=None,
         use_nostalgia=True,
+        optimizer_type="adamw",
     ):
         super(ImageClassifierViT, self).__init__()
         self.lora_config = LoraConfig(
@@ -55,6 +56,7 @@ class ImageClassifierViT(pl.LightningModule):
         self.backbone = ViTClassifier()
         self.rep_dim = 768  # ViT base model representation dimension
         self.use_preocessor = True
+        self.optimizer_type = optimizer_type
 
         # PEFT setup
         self.use_peft = use_peft
@@ -227,13 +229,35 @@ class ImageClassifierViT(pl.LightningModule):
                 p for p in head.parameters() if p.requires_grad
             )
 
-        base_optimizer = torch.optim.AdamW(
-            [
-                {"params": backbone_params, "lr": self.learning_rate},
-                {"params": head_params, "lr": self.downstream_learning_rate},
-            ],
-            weight_decay=0.0,
-        )
+        if self.optimizer_type == "sgd":
+            base_optimizer = torch.optim.SGD(
+                [
+                    {"params": backbone_params, "lr": self.learning_rate},
+                    {"params": head_params, "lr": self.downstream_learning_rate},
+                ],
+                momentum=0.9,
+                weight_decay=0.0,
+                nesterov=True,
+            )
+        elif self.optimizer_type == "adamw":
+            base_optimizer = torch.optim.AdamW(
+                [
+                    {"params": backbone_params, "lr": self.learning_rate},
+                    {"params": head_params, "lr": self.downstream_learning_rate},
+                ],
+                weight_decay=0.0,
+            )
+        elif self.optimizer_type == "adam":
+            base_optimizer = torch.optim.Adam(
+                [
+                    {"params": backbone_params, "lr": self.learning_rate},
+                    {"params": head_params, "lr": self.downstream_learning_rate},
+                ],
+                weight_decay=0.0,
+            )
+        else:
+            raise ValueError(f"Unsupported optimizer type: {self.optimizer_type}")
+
 
         # base_optimizer = torch.optim.SGD(
         #     [

@@ -61,6 +61,7 @@ def get_args():
     parser.add_argument('--adapt_downstream_tasks', type=str2bool, default=False, help='Whether to adapt downstream tasks using nostalgia method')
     parser.add_argument('--num_workers', type=int, default=8, help='Number of workers for data loading')
     parser.add_argument('--head_warmup_epochs', type=int, default=2, help='Number of epochs to warm up task heads during validation')
+    parser.add_argument('--base_optimizer', type=str, default='sgd', help='Base optimizer to use', choices=['sgd', 'adamw', 'adam'])
     return parser.parse_args()
 
 
@@ -76,6 +77,7 @@ class NostalgiaConfig:
     batch_size_for_accumulation: int = 16
     learning_rate: float = 1e-4
     downstream_learning_rate: float = 1e-2
+    base_optimizer: str = 'sgd'
     weight_decay: float = 1e-4
     device: str = 'mps'
     validate_after_steps: int = 10
@@ -142,6 +144,7 @@ class NostalgiaExperiment:
             use_nostalgia=using_nostalgia,
             weight_decay=self.config.weight_decay,
             downstream_learning_rate=self.config.downstream_learning_rate,
+            optimizer_type=self.config.base_optimizer,
         ).to(self.config.device)
         self.writer = SummaryWriter(log_dir=self.config.log_dir)
         self.finished_datasets = []
@@ -344,7 +347,7 @@ class NostalgiaExperiment:
         task_name: str,
         epochs: int = 5,
     ):
-        train_loader, val_loader = self.datasets[task_name]
+        train_loader, _ = self.datasets[task_name]
         self.imageClassifier.set_active_task(task_name)
         criterion = self.imageClassifier.criterion
 
@@ -477,6 +480,9 @@ class NostalgiaExperiment:
 
                 if (niter+1) % self.config.validate_after_steps == 0:
                     self.validate(niter, task_name)
+
+                if (niter+1) % 500 == 0:
+                    torch.cuda.synchronize() if self.config.device == 'cuda' else None
 
                 niter += 1
 
