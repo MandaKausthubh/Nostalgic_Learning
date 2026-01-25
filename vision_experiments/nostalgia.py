@@ -661,6 +661,7 @@ if __name__ == "__main__":
         adapt_downstream_tasks=args.adapt_downstream_tasks,
         num_workers=args.num_workers,
         head_warmup_epochs=args.head_warmup_epochs,
+        base_optimizer=args.base_optimizer,
     )
 
     config.log_dir = f'./logs/nostalgia_vision_experiment/{config.mode}/{config.learning_rate}/{config.lora_r}/{config.hessian_eigenspace_dim}/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
