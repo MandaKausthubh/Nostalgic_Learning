@@ -32,7 +32,7 @@ python -m vision_experiments.nostalgia \
     --root_dir "~/data" \
     --batch_size 32 \
     --batch_size_for_accumulate 8 \
-    --learning_rate 1e-5 \
+    --learning_rate 1e-6 \
     --downstream_learning_rate 5e-4 \
     --weight_decay 1e-4 \
     --device "cuda" \
@@ -44,6 +44,6 @@ python -m vision_experiments.nostalgia \
     --seed 42 \
     --accumulate_mode 'accumulate' \
     --iterations_of_accumulate 32 \
-    --num_workers 8 \
+    --num_workers 4 \
     --head_warmup_epochs 5 \
 

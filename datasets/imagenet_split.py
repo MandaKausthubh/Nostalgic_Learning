@@ -84,6 +84,7 @@ class ImageNetSplit(ImageNet):
         testdir = os.path.join(self.location, "imagenet", "val")
         full_dataset = ImageFolderWithPaths(testdir, transform=self.preprocess)
         if self.split_labels is not None:
+            print(f"Validation: Creating ImageNet split with labels")
             split_indices = [
                 idx for idx, (_, label) in enumerate(full_dataset.samples)
                 if label in self.split_labels
@@ -94,13 +95,14 @@ class ImageNetSplit(ImageNet):
             )
             # self.test_dataset = OutPutSimplifier(Subset(full_dataset, split_indices))
         else:
+            print(f"Validation: Creating ImageNet split with all labels")
             self.test_dataset = OutPutSimplifier(full_dataset)
 
         self.test_loader = torch.utils.data.DataLoader(
             self.test_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            pin_memory=False,
+            pin_memory=True,
             sampler=self.get_test_sampler(),
         )
 
@@ -158,3 +160,13 @@ def get_imagenet_split(
 
 def test_if_labels_remapped_correctly(dataset):
     from tqdm import tqdm
+    progess_bar = tqdm(range(len(dataset)), ncols=120)
+    max_label = -1
+    for i in progess_bar:
+        _, label = dataset[i]
+        if label < 0 or label >= len(dataset.label_map):
+            raise RuntimeError(f"Label {label} out of range after remapping.")
+        if label > max_label:
+            max_label = label
+            progess_bar.set_description(f"Max label so far: {max_label}")
+    print("All labels are within the expected range.")
