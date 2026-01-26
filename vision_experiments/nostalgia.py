@@ -319,16 +319,16 @@ class NostalgiaExperiment:
         )
 
         self.datasets = {
-            f'ImageNet/Split{i}': (dataset.train_loader, dataset.test_loader) 
+            f'ImageNet-Split{i}': (dataset.train_loader, dataset.test_loader) 
             for i, dataset in enumerate(dataset_splits, start=1)
         }
 
         self.dataset_for_accumulate = {
-            f'ImageNet/Split{i}': (dataset.train_loader, dataset.test_loader)
+            f'ImageNet-Split{i}': (dataset.train_loader, dataset.test_loader)
             for i, dataset in enumerate(dataset_splits_for_accumulate, start=1)
         }
 
-        self.order_of_tasks = [f'ImageNet/Split{i}' for i in range(1, len(dataset_splits)+1)]
+        self.order_of_tasks = [f'ImageNet-Split{i}' for i in range(1, len(dataset_splits)+1)]
         self.dataset_num_classes = {
             task_name: 200 for task_name in (self.order_of_tasks)  # hard coding this
         }
