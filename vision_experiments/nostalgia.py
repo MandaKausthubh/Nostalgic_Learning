@@ -341,7 +341,7 @@ class NostalgiaExperiment:
             self.imageClassifier.add_task(task_name, self.dataset_num_classes[task_name])
 
         self.epochs_per_task = {
-            task_name: 1 for task_name in self.datasets.keys()
+            task_name: 5 for task_name in self.datasets.keys()
         }
 
 
