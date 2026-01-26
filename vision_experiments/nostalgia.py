@@ -388,8 +388,8 @@ class NostalgiaExperiment:
             # Validate after each epoch
             # self.validate_dataset(val_loader, criterion, iteration=epoch, task_name=task_name)
 
-        for param in self.imageClassifier.backbone.parameters():
-            param.requires_grad = True
+        # for param in self.imageClassifier.backbone.parameters():
+        #     param.requires_grad = True
 
 
     def validate_dataset(
