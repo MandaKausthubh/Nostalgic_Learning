@@ -355,10 +355,6 @@ class NostalgiaExperiment:
         self.imageClassifier.set_active_task(task_name)
         criterion = self.imageClassifier.criterion
 
-        # Freeze all parameters except task head
-        # for param in self.imageClassifier.backbone.parameters():
-        #     param.requires_grad = False
-
         self.imageClassifier.task_head_list[task_name].train()
         self.imageClassifier.set_active_task(task_name)
 
@@ -384,12 +380,6 @@ class NostalgiaExperiment:
                 optimizer.step()
                 if step % 50 == 0:
                     progress_bar.set_postfix({'loss': loss.item()})
-
-            # Validate after each epoch
-            # self.validate_dataset(val_loader, criterion, iteration=epoch, task_name=task_name)
-
-        # for param in self.imageClassifier.backbone.parameters():
-        #     param.requires_grad = True
 
 
     def validate_dataset(
@@ -563,14 +553,14 @@ class NostalgiaExperiment:
                             )
 
                             if self.config.accumulate_mode == 'union':
-                                print("Updating Hessian eigenspace using union method.")
+                                # print("Updating Hessian eigenspace using union method.")
                                 Q_curr, Lambda_curr = update_Q_lambda_union(
                                     Q_curr, Lambda_curr,
                                     Q_new, Lambda_new,
                                     k_max=self.config.hessian_eigenspace_dim * 20
                                 )
                             elif self.config.accumulate_mode == 'accumulate':
-                                print("Updating Hessian eigenspace using accumulate method.")
+                                # print("Updating Hessian eigenspace using accumulate method.")
                                 Q_curr, Lambda_curr = accumulate_hessian_eigenspace(
                                     Q_curr, Lambda_curr,
                                     Q_new, Lambda_new,
@@ -582,7 +572,7 @@ class NostalgiaExperiment:
                         assert Q_curr is not None and Lambda_curr is not None, "Q_curr and Lambda_curr should not be None after accumulation."
 
                         if self.config.accumulate_mode == 'union':
-                            print("Updating Hessian eigenspace using union method.")
+                            # print("Updating Hessian eigenspace using union method.")
                             Q_prev, Lambda_prev = update_Q_lambda_union(
                                 Q_prev, Lambda_prev,
                                 Q_curr, Lambda_curr,
