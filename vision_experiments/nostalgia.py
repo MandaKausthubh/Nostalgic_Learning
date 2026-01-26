@@ -360,6 +360,7 @@ class NostalgiaExperiment:
             param.requires_grad = False
 
         self.imageClassifier.task_head_list[task_name].train()
+        self.imageClassifier.set_active_task(task_name)
 
         optimizer = torch.optim.Adam(
             self.imageClassifier.task_head_list[task_name].parameters(),
@@ -407,7 +408,7 @@ class NostalgiaExperiment:
 
         total_loss = 0.0
         accuracy = 0.0
-        for input, target in limited_loader(val_loader, 1000):
+        for input, target in limited_loader(val_loader, 100):
             self.imageClassifier.eval()
             input, target = input.to(self.config.device), target.to(self.config.device)
             input = self.imageClassifier.preprocess_inputs(input)
@@ -452,7 +453,7 @@ class NostalgiaExperiment:
         )
 
         for epoch in range(epochs):
-            for input, target in tqdm(limited_loader(train_loader, 1000), desc=f"{epoch}. Training on {task_name}", ncols=80):
+            for input, target in tqdm(limited_loader(train_loader, 100), desc=f"{epoch}. Training on {task_name}", ncols=80):
                 self.imageClassifier.train()
                 input, target = input.to(self.config.device), target.to(self.config.device)
                 input = self.imageClassifier.preprocess_inputs(input)
