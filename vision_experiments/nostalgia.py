@@ -367,7 +367,7 @@ class NostalgiaExperiment:
 
         for epoch in range(epochs):
             step = 0
-            progress_bar = tqdm(limited_loader(train_loader, 100), ncols=120, desc=f"Epoch {epoch}. Retraining head for {task_name}")
+            progress_bar = tqdm((train_loader), ncols=120, desc=f"Epoch {epoch}. Retraining head for {task_name}")
             for input, target in progress_bar:
                 self.imageClassifier.train()
                 input, target = input.to(self.config.device), target.to(self.config.device)
@@ -398,7 +398,7 @@ class NostalgiaExperiment:
 
         total_loss = 0.0
         accuracy = 0.0
-        for input, target in limited_loader(val_loader, 100):
+        for input, target in (val_loader):
             self.imageClassifier.eval()
             input, target = input.to(self.config.device), target.to(self.config.device)
             input = self.imageClassifier.preprocess_inputs(input)
@@ -443,7 +443,7 @@ class NostalgiaExperiment:
         )
 
         for epoch in range(epochs):
-            for input, target in tqdm(limited_loader(train_loader, 100), desc=f"{epoch}. Training on {task_name}", ncols=120):
+            for input, target in tqdm((train_loader), desc=f"{epoch}. Training on {task_name}", ncols=120):
                 self.imageClassifier.train()
                 input, target = input.to(self.config.device), target.to(self.config.device)
                 input = self.imageClassifier.preprocess_inputs(input)
