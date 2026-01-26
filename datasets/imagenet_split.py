@@ -56,7 +56,7 @@ class ImageNetSplit(ImageNet):
         traindir = os.path.join(self.location, "imagenet", "train")
         full_dataset = ImageFolderWithPaths(traindir, transform=self.preprocess)
         if self.split_labels is not None:
-            print(f"Creating ImageNet split with labels")
+            # print(f"Creating ImageNet split with labels")
             split_indices = [
                 idx for idx, (_, label) in enumerate(full_dataset.samples)
                 if label in self.split_labels
@@ -67,7 +67,7 @@ class ImageNetSplit(ImageNet):
             )
             # self.train_dataset = OutPutSimplifier(Subset(full_dataset, split_indices))
         else:
-            print(f"Creating ImageNet split with all labels")
+            # print(f"Creating ImageNet split with all labels")
             self.train_dataset = OutPutSimplifier(full_dataset)
 
         self.sampler = self.get_train_sampler()
@@ -84,7 +84,7 @@ class ImageNetSplit(ImageNet):
         testdir = os.path.join(self.location, "imagenet", "val")
         full_dataset = ImageFolderWithPaths(testdir, transform=self.preprocess)
         if self.split_labels is not None:
-            print(f"Validation: Creating ImageNet split with labels")
+            # print(f"Validation: Creating ImageNet split with labels")
             split_indices = [
                 idx for idx, (_, label) in enumerate(full_dataset.samples)
                 if label in self.split_labels
@@ -95,7 +95,7 @@ class ImageNetSplit(ImageNet):
             )
             # self.test_dataset = OutPutSimplifier(Subset(full_dataset, split_indices))
         else:
-            print(f"Validation: Creating ImageNet split with all labels")
+            # print(f"Validation: Creating ImageNet split with all labels")
             self.test_dataset = OutPutSimplifier(full_dataset)
 
         self.test_loader = torch.utils.data.DataLoader(
