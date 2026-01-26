@@ -13,10 +13,14 @@ from datasets import get_imagenet_split
 from models.vit32 import ImageClassifierViT
 from tqdm import tqdm
 import datetime
+from itertools import islice
 
 from torch.utils.tensorboard import SummaryWriter
 import argparse
 
+
+def limited_loader(dataloader, max_batches):
+    return islice(dataloader, max_batches)
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -403,7 +407,7 @@ class NostalgiaExperiment:
 
         total_loss = 0.0
         accuracy = 0.0
-        for input, target in val_loader:
+        for input, target in limited_loader(val_loader, 1000):
             self.imageClassifier.eval()
             input, target = input.to(self.config.device), target.to(self.config.device)
             input = self.imageClassifier.preprocess_inputs(input)
@@ -448,7 +452,7 @@ class NostalgiaExperiment:
         )
 
         for epoch in range(epochs):
-            for input, target in tqdm((train_loader), desc=f"{epoch}. Training on {task_name}", ncols=80):
+            for input, target in tqdm(limited_loader(train_loader, 1000), desc=f"{epoch}. Training on {task_name}", ncols=80):
                 self.imageClassifier.train()
                 input, target = input.to(self.config.device), target.to(self.config.device)
                 input = self.imageClassifier.preprocess_inputs(input)
