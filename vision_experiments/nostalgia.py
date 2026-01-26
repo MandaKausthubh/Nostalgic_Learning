@@ -356,8 +356,8 @@ class NostalgiaExperiment:
         criterion = self.imageClassifier.criterion
 
         # Freeze all parameters except task head
-        for param in self.imageClassifier.backbone.parameters():
-            param.requires_grad = False
+        # for param in self.imageClassifier.backbone.parameters():
+        #     param.requires_grad = False
 
         self.imageClassifier.task_head_list[task_name].train()
         self.imageClassifier.set_active_task(task_name)
