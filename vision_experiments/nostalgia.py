@@ -565,7 +565,8 @@ class NostalgiaExperiment:
                                     k_max=self.config.hessian_eigenspace_dim * 20
                                 )
                             elif self.config.accumulate_mode == 'accumulate':
-                                Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
+                                print("Updating Hessian eigenspace using accumulate method.")
+                                Q_curr, Lambda_curr = accumulate_hessian_eigenspace(
                                     Q_curr, Lambda_curr,
                                     Q_new, Lambda_new,
                                     t=task_counter, k=self.config.hessian_eigenspace_dim
