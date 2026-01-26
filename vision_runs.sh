@@ -45,6 +45,6 @@ python -m vision_experiments.nostalgia \
     --accumulate_mode 'accumulate' \
     --iterations_of_accumulate 32 \
     --num_workers 4 \
-    --head_warmup_epochs 5 \
+    --head_warmup_epochs 0 \
     --base_optimizer "adamw" \
 
