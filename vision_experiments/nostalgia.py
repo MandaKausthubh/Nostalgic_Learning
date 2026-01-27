@@ -475,11 +475,14 @@ class NostalgiaExperiment:
 
                 if (niter+1) % self.config.validate_after_steps == 0:
                     self.validate(niter, task_name)
+                    self.writer.flush()
 
                 if (niter+1) % 500 == 0:
                     torch.cuda.synchronize() if self.config.device == 'cuda' else None
 
                 niter += 1
+                self.writer.flush()
+
 
         return niter
 
