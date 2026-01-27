@@ -30,21 +30,21 @@
 python -m vision_experiments.nostalgia \
     --mode "nostalgia" \
     --root_dir "~/data" \
-    --batch_size 128 \
+    --batch_size 256 \
     --batch_size_for_accumulate 16 \
-    --learning_rate 3e-5 \
-    --downstream_learning_rate 1e-4 \
+    --learning_rate 3e-4 \
+    --downstream_learning_rate 3e-3 \
     --weight_decay 1e-4 \
     --device "cuda" \
     --hessian_eigenspace_dim 16 \
     --validate_after_steps 100 \
-    --lora_r 8 \
-    --lora_alpha 16 \
+    --lora_r 16 \
+    --lora_alpha 32 \
     --lora_dropout 0.1 \
     --seed 42 \
     --accumulate_mode 'accumulate' \
     --iterations_of_accumulate 32 \
     --num_workers 4 \
-    --head_warmup_epochs 5 \
+    --head_warmup_epochs 10 \
     --base_optimizer "adamw" \
 

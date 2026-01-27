@@ -43,6 +43,7 @@ def get_args():
     parser.add_argument('--learning_rate', type=float, default=5e-4, help='Learning rate for optimizer')
     parser.add_argument('--downstream_learning_rate', type=float, default=1e-2, help='Learning rate for downstream tasks')
     parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weighted decay rate for optimizer')
+    parser.add_argument('--num_epochs', type=int, default=25, help='Number of epochs per task')
     parser.add_argument('--device', type=str, default='mps', help='Device to use for training (e.g., cpu, cuda, mps)',
                         choices=['cpu', 'cuda', 'mps'])
     parser.add_argument('--hessian_eigenspace_dim', type=int, default=32, help='Dimension of Hessian eigenspace')
@@ -83,6 +84,7 @@ class NostalgiaConfig:
     downstream_learning_rate: float = 1e-2
     base_optimizer: str = 'sgd'
     weight_decay: float = 1e-4
+    num_epochs: int = 25
     device: str = 'mps'
     validate_after_steps: int = 10
     log_deltas: bool = True
@@ -341,7 +343,7 @@ class NostalgiaExperiment:
             self.imageClassifier.add_task(task_name, self.dataset_num_classes[task_name])
 
         self.epochs_per_task = {
-            task_name: 5 for task_name in self.datasets.keys()
+            task_name: self.config.num_epochs for task_name in self.datasets.keys()
         }
 
 
@@ -497,6 +499,7 @@ class NostalgiaExperiment:
             self.imageClassifier.set_active_task(task_name)
             criterion = self.imageClassifier.criterion
             self.validate_dataset(val_loader, criterion, iteration, task_name)
+            self.writer.flush()
 
 
     def train(self, erase_past=False):
@@ -642,6 +645,7 @@ if __name__ == "__main__":
         learning_rate=args.learning_rate,
         downstream_learning_rate=args.downstream_learning_rate,
         weight_decay=args.weight_decay,
+        num_epochs=args.num_epochs,
         device=args.device,
         hessian_eigenspace_dim=args.hessian_eigenspace_dim,
         validate_after_steps=args.validate_after_steps,
