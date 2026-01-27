@@ -167,32 +167,6 @@ Exact performance depends on task order, optimizer choice, and training duration
 
 ---
 
-## Citation
-
-If you use this code, please cite:
-
-```bibtex
-@article{nostalgia2026,
-  title={Nostalgia: Hessian-Aware Constrained Fine-Tuning for Continual Learning},
-  author={Anonymous},
-  year={2026}
-}
-```
-
-(Replace with the final citation upon publication.)
-
----
-
 ## License
 
 This project is released under the MIT License.
-
----
-
-If you want, I can next:
-
-* tailor this README to match **OpenReview / ICML artifact guidelines**,
-* add a **“Known Issues / Debugging”** section (very useful for custom optimizers),
-* or help you write an **Artifact Evaluation appendix**.
-
-You’re in excellent shape — this repo now looks like a serious research artifact.
