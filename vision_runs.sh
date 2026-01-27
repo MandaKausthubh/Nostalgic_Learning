@@ -30,10 +30,10 @@
 python -m vision_experiments.nostalgia \
     --mode "nostalgia" \
     --root_dir "~/data" \
-    --batch_size 32 \
-    --batch_size_for_accumulate 8 \
-    --learning_rate 1e-5 \
-    --downstream_learning_rate 1e-3 \
+    --batch_size 128 \
+    --batch_size_for_accumulate 16 \
+    --learning_rate 3e-5 \
+    --downstream_learning_rate 1e-4 \
     --weight_decay 1e-4 \
     --device "cuda" \
     --hessian_eigenspace_dim 16 \
