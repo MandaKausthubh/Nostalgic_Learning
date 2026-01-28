@@ -43,6 +43,7 @@ python -m vision_experiments.nostalgia \
     --lora_dropout 0.1 \
     --seed 42 \
     --accumulate_mode 'accumulate' \
+    --merge_tasks 'union' \
     --iterations_of_accumulate 32 \
     --num_workers 4 \
     --head_warmup_epochs 10 \

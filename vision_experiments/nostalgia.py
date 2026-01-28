@@ -67,6 +67,7 @@ def get_args():
     parser.add_argument('--num_workers', type=int, default=8, help='Number of workers for data loading')
     parser.add_argument('--head_warmup_epochs', type=int, default=2, help='Number of epochs to warm up task heads during validation')
     parser.add_argument('--base_optimizer', type=str, default='sgd', help='Base optimizer to use', choices=['sgd', 'adamw', 'adam'])
+    parser.add_argument('--merge_tasks', type=str, default='union', help='Method to merge Hessian eigenspaces of two different tasks', choices=['union', 'accumulate'])
     return parser.parse_args()
 
 
@@ -103,6 +104,7 @@ class NostalgiaConfig:
     head_warmup_epochs: int = 5
 
     accumulate_mode: str = 'accumulate'  # or 'union'
+    merge_tasks: str = 'union'  # or 'accumulate'
     iterations_of_accumulation: int = 5
     use_scaling: bool = True
     adapt_downstream_tasks: bool = False
@@ -577,14 +579,14 @@ class NostalgiaExperiment:
 
                         assert Q_curr is not None and Lambda_curr is not None, "Q_curr and Lambda_curr should not be None after accumulation."
 
-                        if self.config.accumulate_mode == 'union':
+                        if self.config.merge_tasks == 'union':
                             # print("Updating Hessian eigenspace using union method.")
                             Q_prev, Lambda_prev = update_Q_lambda_union(
                                 Q_prev, Lambda_prev,
                                 Q_curr, Lambda_curr,
                                 k_max=self.config.hessian_eigenspace_dim * 20
                             )
-                        elif self.config.accumulate_mode == 'accumulate':
+                        elif self.config.merge_tasks == 'accumulate':
                             Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
                                 Q_prev, Lambda_prev,
                                 Q_curr, Lambda_curr,
