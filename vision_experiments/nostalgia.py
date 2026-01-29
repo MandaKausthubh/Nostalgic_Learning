@@ -1,6 +1,7 @@
 import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
+import torch.optim.lr_scheduler as lr_scheduler
 from dataclasses import dataclass
 from typing import Optional, Dict
 
@@ -367,6 +368,8 @@ class NostalgiaExperiment:
             lr=self.config.learning_rate
         )
 
+        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(train_loader)*epochs, eta_min=1e-6)
+
         print("Retraining task head for", task_name)
 
         for epoch in range(epochs):
@@ -382,6 +385,7 @@ class NostalgiaExperiment:
                 loss = criterion(output, target)
                 loss.backward()
                 optimizer.step()
+                scheduler.step()
                 if step % 50 == 0:
                     progress_bar.set_postfix({'loss': loss.item()})
 
@@ -446,6 +450,10 @@ class NostalgiaExperiment:
             iteration=starting_step
         )
 
+        scheduler = lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=len(train_loader)*epochs, eta_min=1e-6
+        )
+
         for epoch in range(epochs):
             for input, target in tqdm((train_loader), desc=f"{epoch}. Training on {task_name}", ncols=120):
                 self.imageClassifier.train()
@@ -461,6 +469,7 @@ class NostalgiaExperiment:
 
                 loss.backward()
                 optimizer.step()
+                scheduler.step()
 
                 accuracy = (output.argmax(dim=1) == target).float().mean().item()
 
