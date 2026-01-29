@@ -47,6 +47,6 @@ python -m vision_experiments.nostalgia \
     --merge_tasks 'union' \
     --iterations_of_accumulate 32 \
     --num_workers 4 \
-    --head_warmup_epochs 10 \
+    --head_warmup_epochs 0 \
     --base_optimizer "adamw" \
 
