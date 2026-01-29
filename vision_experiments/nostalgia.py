@@ -451,7 +451,9 @@ class NostalgiaExperiment:
         )
 
         scheduler = lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=len(train_loader)*epochs, eta_min=1e-6
+            optimizer.base_optimizer,   # type: ignore
+            T_max=len(train_loader)*epochs,
+            eta_min=1e-6
         )
 
         for epoch in range(epochs):
