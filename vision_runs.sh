@@ -33,7 +33,7 @@ python -m vision_experiments.nostalgia \
     --batch_size 256 \
     --num_epochs 25 \
     --batch_size_for_accumulate 16 \
-    --learning_rate 3e-4 \
+    --learning_rate 1e-5 \
     --downstream_learning_rate 3e-3 \
     --weight_decay 1e-4 \
     --device "cuda" \
