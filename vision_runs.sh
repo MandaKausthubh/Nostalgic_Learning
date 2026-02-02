@@ -38,6 +38,7 @@ python -m vision_experiments.nostalgia \
     --weight_decay 1e-4 \
     --device "cuda" \
     --hessian_eigenspace_dim 16 \
+    --moving_average_hessians_epochs 5 \
     --validate_after_steps 100 \
     --lora_r 16 \
     --lora_alpha 32 \

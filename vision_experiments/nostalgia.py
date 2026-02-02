@@ -5,6 +5,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from dataclasses import dataclass
 from typing import Optional, Dict
 
+from utils.nostalgia import NostalgiaOptimizer
 from utils_new.accumulate import accumulate_hessian_eigenspace
 from utils_new.ortho_accumulate import update_Q_lambda_union
 from utils_new.hessian import compute_Q_for_task
@@ -48,6 +49,7 @@ def get_args():
     parser.add_argument('--device', type=str, default='mps', help='Device to use for training (e.g., cpu, cuda, mps)',
                         choices=['cpu', 'cuda', 'mps'])
     parser.add_argument('--hessian_eigenspace_dim', type=int, default=32, help='Dimension of Hessian eigenspace')
+    parser.add_argument('--moving_average_hessians_epochs', type=int, default=5, help='Frequency of updating Hessian eigenspace in epochs')
     parser.add_argument('--validate_after_steps', type=int, default=100, help='Validation frequency in steps')
     parser.add_argument('--log_dir', type=str,
                         default=f'./logs/nostalgia_vision_experiment/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}',
@@ -93,6 +95,7 @@ class NostalgiaConfig:
     num_workers: int = 4
 
     hessian_eigenspace_dim: int = 16
+    moving_average_hessians_epochs: int = 5
 
     lora_r: int = 8
     lora_alpha: int = 16
@@ -211,6 +214,13 @@ class NostalgiaExperiment:
 
     def save_model(self, path: str):
         torch.save(self.imageClassifier.state_dict(), path)
+
+    def load_checkpoint_after_task(self, task_name: str):
+        path = f'./model_weights/vision/nostalgia_model_after_{task_name}.pth'
+        print(f"Reloading model from {path}")
+        state = torch.load(path, map_location=self.config.device)
+        self.imageClassifier.load_state_dict(state)
+        torch.cuda.empty_cache()
 
     def prepare_dataloader(self, dataset_class, train: bool = True):
         dataset = dataset_class(
@@ -498,6 +508,17 @@ class NostalgiaExperiment:
                 niter += 1
                 self.writer.flush()
 
+            if self.config.mode == "nostalgia" and epoch % self.config.moving_average_hessians_epochs == 0:
+                for old_task in self.finished_datasets:
+                    Q_new, _ = self.update_nostalgia(
+                        Q_old=Q_prev,
+                        Lambda_old=scaling,
+                        task_counter=len(self.finished_datasets),
+                        task_name=old_task
+                    )
+                    if self.config.mode == "nostalgia":
+                        assert type(optimizer) == NostalgiaOptimizer, "Optimizer must be NostalgiaOptimizer to set Q."
+                        optimizer.set_Q(Q_new, None)
 
         return niter
 
@@ -515,6 +536,49 @@ class NostalgiaExperiment:
             self.writer.flush()
 
 
+    def update_nostalgia(self, Q_old, Lambda_old, task_counter: int, task_name: str):
+        Q_new, Lambda_new = None, None
+        for _ in range(self.config.iterations_of_accumulation):
+            Q_task, Lambda_task = compute_Q_for_task(
+                model=self.imageClassifier,
+                train_loader=self.dataset_for_accumulate[task_name][0],
+                device=self.config.device,
+                k=self.config.hessian_eigenspace_dim
+            )
+
+            if self.config.accumulate_mode == 'union':
+                Q_new, Lambda_new = update_Q_lambda_union(
+                    Q_new, Lambda_new,
+                    Q_task, Lambda_task,
+                    k_max=self.config.hessian_eigenspace_dim * 20
+                )
+            elif self.config.accumulate_mode == 'accumulate':
+                Q_new, Lambda_new = accumulate_hessian_eigenspace(
+                    Q_new, Lambda_new,
+                    Q_task, Lambda_task,
+                    t=task_counter, k=self.config.hessian_eigenspace_dim
+                )
+            else:
+                raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
+
+        # Merge with old nostalgia:
+        if self.config.merge_tasks == 'union':
+            Q_merged, Lambda_merged = update_Q_lambda_union(
+                Q_old, Lambda_old,
+                Q_new, Lambda_new,  # type: ignore
+                k_max=self.config.hessian_eigenspace_dim * 20
+            )
+        elif self.config.merge_tasks == 'accumulate':
+            Q_merged, Lambda_merged = accumulate_hessian_eigenspace(
+                Q_old, Lambda_old,
+                Q_new, Lambda_new,  # type: ignore
+                t=task_counter, k=self.config.hessian_eigenspace_dim
+            )
+        else:
+            raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}") 
+
+        return Q_merged, Lambda_merged
+
     def train(self, erase_past=False):
         self.prepare_all_datasets()
         torch.cuda.empty_cache()
@@ -528,6 +592,143 @@ class NostalgiaExperiment:
             self.finished_datasets = []
 
         for task_name in self.order_of_tasks:
+            self.finished_datasets.append(task_name)
+
+            epochs = self.epochs_per_task[task_name]
+            train_loader, _ = self.datasets[task_name]
+
+            print(f"\n\nStarting training on {task_name} for {epochs} epochs.")
+
+            print(f"Using scaling: {self.config.use_scaling}")
+            total_steps = self.train_dataset(
+                task_name=task_name,
+                Q_prev=Q_prev,
+                scaling=Lambda_prev if self.config.use_scaling else None,
+                starting_step=total_steps,
+                epochs=epochs,
+                log_deltas=self.config.log_deltas,
+                mode=self.config.mode,
+            )
+
+            if self.config.mode == "EWC":
+                fisher_information = self.imageClassifier.get_fisher_information(dataloader=train_loader)
+                self.store_ewc_information(fisher_information)
+
+            print(f"Immediately after training on {task_name}, total steps: {total_steps}")
+
+            if self.config.mode == "nostalgia":
+                # After training on the current task, compute the Hessian eigenspace
+                if self.config.device == 'cuda':
+                    with torch.backends.cuda.sdp_kernel(
+                        enable_flash=False,
+                        enable_mem_efficient=False,
+                        enable_math=True
+                    ):
+                        self.imageClassifier.set_active_task(task_name)
+                        Q_curr, Lambda_curr = None, None
+
+                        assert self.config.iterations_of_accumulation >= 1, "iterations_of_accumulation must be at least 1"
+
+                        # for _ in range(self.config.iterations_of_accumulation):
+                        #     Q_new, Lambda_new = compute_Q_for_task(
+                        #         model=self.imageClassifier,
+                        #         train_loader=self.dataset_for_accumulate[task_name][0],
+                        #         device=self.config.device,
+                        #         k=self.config.hessian_eigenspace_dim
+                        #     )
+                        #
+                        #     if self.config.accumulate_mode == 'union':
+                        #         # print("Updating Hessian eigenspace using union method.")
+                        #         Q_curr, Lambda_curr = update_Q_lambda_union(
+                        #             Q_curr, Lambda_curr,
+                        #             Q_new, Lambda_new,
+                        #             k_max=self.config.hessian_eigenspace_dim * 20
+                        #         )
+                        #     elif self.config.accumulate_mode == 'accumulate':
+                        #         # print("Updating Hessian eigenspace using accumulate method.")
+                        #         Q_curr, Lambda_curr = accumulate_hessian_eigenspace(
+                        #             Q_curr, Lambda_curr,
+                        #             Q_new, Lambda_new,
+                        #             t=task_counter, k=self.config.hessian_eigenspace_dim
+                        #         )
+                        #     else:
+                        #         raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
+                        #
+                        # assert Q_curr is not None and Lambda_curr is not None, "Q_curr and Lambda_curr should not be None after accumulation."
+                        #
+                        # if self.config.merge_tasks == 'union':
+                        #     # print("Updating Hessian eigenspace using union method.")
+                        #     Q_prev, Lambda_prev = update_Q_lambda_union(
+                        #         Q_prev, Lambda_prev,
+                        #         Q_curr, Lambda_curr,
+                        #         k_max=self.config.hessian_eigenspace_dim * 20
+                        #     )
+                        # elif self.config.merge_tasks == 'accumulate':
+                        #     Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
+                        #         Q_prev, Lambda_prev,
+                        #         Q_curr, Lambda_curr,
+                        #         t=task_counter, k=self.config.hessian_eigenspace_dim
+                        #     )
+                        # else:
+                        #     raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
+
+                        Q_prev, Lambda_prev = self.update_nostalgia(
+                            Q_prev, Lambda_prev,
+                            task_counter, task_name
+                        )
+
+                else:
+                    Q_curr, Lambda_curr = compute_Q_for_task(
+                        model=self.imageClassifier,
+                        train_loader=self.dataset_for_accumulate[task_name][0],
+                        device=self.config.device,
+                        k=self.config.hessian_eigenspace_dim
+                    )
+
+                    if self.config.accumulate_mode == 'union':
+                        print("Updating Hessian eigenspace using union method.")
+                        Q_prev, Lambda_prev = update_Q_lambda_union(
+                            Q_prev, Lambda_prev,
+                            Q_curr, Lambda_curr,
+                            k_max=self.config.hessian_eigenspace_dim * 20
+                        )
+                    elif self.config.accumulate_mode == 'accumulate':
+                        Q_prev, Lambda_prev = accumulate_hessian_eigenspace(
+                            Q_prev, Lambda_prev,
+                            Q_curr, Lambda_curr,
+                            t=task_counter, k=self.config.hessian_eigenspace_dim
+                        )
+                    else:
+                        raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
+
+                if self.config.reset_lora:
+                    self.imageClassifier._merge_and_unload_peft()
+                    self.imageClassifier._apply_peft()
+
+            # Save model after each task
+            self.save_model(f'./model_weights/vision/nostalgia_model_after_{task_name}.pth')
+
+            print(f"Completed training on {task_name}.")
+            print(f"Total steps so far: {total_steps}.")
+            task_counter += 1
+
+        print("Training completed for all tasks.")
+
+
+
+    def train_from_first_task(self):
+        self.prepare_all_datasets()
+        self.finished_datasets = [self.order_of_tasks[0]]
+        self.load_checkpoint_after_task(self.order_of_tasks[0])
+
+        Q_prev, Lambda_prev = None, None
+
+        total_steps = self.epochs_per_task[self.order_of_tasks[0]] * len(self.datasets[self.order_of_tasks[0]][0])
+        task_counter = 1
+
+        print(f"Resuming training from first task: {self.order_of_tasks[0]}")
+
+        for task_idx, task_name in enumerate(self.order_of_tasks[1:], start=1):
             self.finished_datasets.append(task_name)
 
             epochs = self.epochs_per_task[task_name]
@@ -646,6 +847,8 @@ class NostalgiaExperiment:
 
 
 
+
+
 if __name__ == "__main__": 
 
     args = get_args()
@@ -661,6 +864,7 @@ if __name__ == "__main__":
         num_epochs=args.num_epochs,
         device=args.device,
         hessian_eigenspace_dim=args.hessian_eigenspace_dim,
+        moving_average_hessians_epochs=args.moving_average_hessians_epochs,
         validate_after_steps=args.validate_after_steps,
         # log_dir=args.log_dir,
         lora_r=args.lora_r,
