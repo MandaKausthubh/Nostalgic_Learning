@@ -537,52 +537,50 @@ class NostalgiaExperiment:
 
 
     def update_nostalgia(self, Q_old, Lambda_old, task_counter: int, task_name: str):
-        with torch.backends.cuda.sdp_kernel(
-            enable_flash=False,
-            enable_mem_efficient=False,
-            enable_math=True
-        ):
-            Q_new, Lambda_new = None, None
-            for _ in range(self.config.iterations_of_accumulation):
-                Q_task, Lambda_task = compute_Q_for_task(
-                    model=self.imageClassifier,
-                    train_loader=self.dataset_for_accumulate[task_name][0],
-                    device=self.config.device,
-                    k=self.config.hessian_eigenspace_dim
-                )
+        torch.backends.cuda.enable_flash_sdp(False)
+        torch.backends.cuda.enable_math_sdp(True)
+        torch.backends.cuda.enable_mem_efficient_sdp(False)
+        Q_new, Lambda_new = None, None
+        for _ in range(self.config.iterations_of_accumulation):
+            Q_task, Lambda_task = compute_Q_for_task(
+                model=self.imageClassifier,
+                train_loader=self.dataset_for_accumulate[task_name][0],
+                device=self.config.device,
+                k=self.config.hessian_eigenspace_dim
+            )
 
-                if self.config.accumulate_mode == 'union':
-                    Q_new, Lambda_new = update_Q_lambda_union(
-                        Q_new, Lambda_new,
-                        Q_task, Lambda_task,
-                        k_max=self.config.hessian_eigenspace_dim * 20
-                    )
-                elif self.config.accumulate_mode == 'accumulate':
-                    Q_new, Lambda_new = accumulate_hessian_eigenspace(
-                        Q_new, Lambda_new,
-                        Q_task, Lambda_task,
-                        t=task_counter, k=self.config.hessian_eigenspace_dim
-                    )
-                else:
-                    raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
-
-            # Merge with old nostalgia:
-            if self.config.merge_tasks == 'union':
-                Q_merged, Lambda_merged = update_Q_lambda_union(
-                    Q_old, Lambda_old,
-                    Q_new, Lambda_new,  # type: ignore
+            if self.config.accumulate_mode == 'union':
+                Q_new, Lambda_new = update_Q_lambda_union(
+                    Q_new, Lambda_new,
+                    Q_task, Lambda_task,
                     k_max=self.config.hessian_eigenspace_dim * 20
                 )
-            elif self.config.merge_tasks == 'accumulate':
-                Q_merged, Lambda_merged = accumulate_hessian_eigenspace(
-                    Q_old, Lambda_old,
-                    Q_new, Lambda_new,  # type: ignore
+            elif self.config.accumulate_mode == 'accumulate':
+                Q_new, Lambda_new = accumulate_hessian_eigenspace(
+                    Q_new, Lambda_new,
+                    Q_task, Lambda_task,
                     t=task_counter, k=self.config.hessian_eigenspace_dim
                 )
             else:
-                raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}") 
+                raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}")
 
-            return Q_merged, Lambda_merged
+        # Merge with old nostalgia:
+        if self.config.merge_tasks == 'union':
+            Q_merged, Lambda_merged = update_Q_lambda_union(
+                Q_old, Lambda_old,
+                Q_new, Lambda_new,  # type: ignore
+                k_max=self.config.hessian_eigenspace_dim * 20
+            )
+        elif self.config.merge_tasks == 'accumulate':
+            Q_merged, Lambda_merged = accumulate_hessian_eigenspace(
+                Q_old, Lambda_old,
+                Q_new, Lambda_new,  # type: ignore
+                t=task_counter, k=self.config.hessian_eigenspace_dim
+            )
+        else:
+            raise ValueError(f"Unknown accumulate_mode: {self.config.accumulate_mode}") 
+
+        return Q_merged, Lambda_merged
 
     def train(self, erase_past=False):
         self.prepare_all_datasets()
