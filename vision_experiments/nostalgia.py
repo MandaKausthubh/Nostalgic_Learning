@@ -509,7 +509,7 @@ class NostalgiaExperiment:
                 self.writer.flush()
 
             if self.config.mode == "nostalgia" and epoch % self.config.moving_average_hessians_epochs == 0:
-                for old_task in self.finished_datasets:
+                for old_task in self.finished_datasets[:-1]:
                     Q_new, _ = self.update_nostalgia(
                         Q_old=Q_prev,
                         Lambda_old=scaling,
@@ -677,7 +677,7 @@ class NostalgiaExperiment:
 
                         Q_prev, Lambda_prev = self.update_nostalgia(
                             Q_prev, Lambda_prev,
-                            task_counter, task_name
+                            task_counter, task_name,
                         )
 
                 else:
