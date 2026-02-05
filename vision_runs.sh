@@ -31,7 +31,7 @@ python -m vision_experiments.nostalgia \
     --mode "nostalgia" \
     --root_dir "~/data" \
     --batch_size 256 \
-    --num_epochs 1 \
+    --num_epochs 0 \
     --batch_size_for_accumulate 16 \
     --learning_rate 1e-5 \
     --downstream_learning_rate 3e-3 \

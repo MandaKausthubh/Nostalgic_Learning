@@ -52,7 +52,7 @@ def compute_Q_for_task(
     eps = 1e-6 * torch.trace(T) / T.shape[0]
     T = T + eps * torch.eye(T.shape[0], device=T.device)
 
-    data_type = T.device.type
+    data_type = T.dtype
 
     print(f"[Lanczos] k={Q_basis.shape[1]} | time={end - start:.2f}s")
 
@@ -64,9 +64,9 @@ def compute_Q_for_task(
         T = T.detach().cpu()
         Q_basis = Q_basis.detach().cpu()
 
-    eigvals, eigvecs = torch.linalg.eigh(T.double())
-    eigvals = eigvals.to(data_type)
-    eigvecs = eigvecs.to(data_type)
+    eigvals, eigvecs = torch.linalg.eigh(T.to(torch.float64))
+    eigvals = eigvals.to(dtype=data_type)
+    eigvecs = eigvecs.to(dtype=data_type)
 
     # Sort descending
     idx = torch.argsort(eigvals, descending=True)
