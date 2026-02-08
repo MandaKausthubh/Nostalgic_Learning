@@ -13,9 +13,47 @@ from utils_new.accumulate import accumulate_hessian_eigenspace
 from utils_new.hessian import compute_Q_for_task
 from utils_new.ortho_accumulate import update_Q_lambda_union
 
+import argparse
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', '1'):
+        return True
+    if v.lower() in ('no', 'false', 'f', '0'):
+        return False
+    raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def get_args():
+    parser = argparse.ArgumentParser(description="Nostalgia Experiment Configuration")
+    parser.add_argument('--root_dir', type=str, default='~/data', help='Root directory for datasets')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
+    parser.add_argument('--device', type=str, default='cuda', help='Device to use for training (e.g., "cuda" or "cpu")')
+    parser.add_argument('--lora_rank', type=int, default=16, help='Rank for LoRA adaptation')
+    parser.add_argument('--lora_alpha', type=int, default=16, help='Alpha for LoRA adaptation')
+    parser.add_argument('--lora_dropout', type=float, default=0.1, help='Dropout rate for LoRA adaptation')
+    parser.add_argument('--optimizer', type=str, default='adamw', help='Optimizer type (e.g., "adamw")')
+    parser.add_argument('--hessian_dim', type=int, default=32, help='Dimensionality of the Hessian eigenspace')
+    parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate for training')
+    parser.add_argument('--downstream_learning_rate', type=float, default=3e-3, help='Learning rate for downstream task head training')
+    parser.add_argument('--log_deltas', type=str2bool, default=True, help='Whether to log gradient deltas in TensorBoard')
+    parser.add_argument('--use_scaling', type=str2bool, default=False, help='Whether to use eigenvalue-aware scaling in the optimizer')
+    parser.add_argument('--num_epochs', type=int, default=20, help='Number of epochs to train each task')
+    parser.add_argument('--validate_every', type=int, default=100, help='Number of steps between validations')
+    parser.add_argument('--hessian_average_epochs', type=int, default=5, help='Number of epochs to average for Hessian computation')
+    parser.add_argument('--num_warmup_epochs', type=int, default=10, help='Number of warmup epochs before applying nostalgia')
+    parser.add_argument('--num_workers', type=int, default=4, help='Number of worker processes for data loading')
+    parser.add_argument('--batch_size', type=int, default=512, help='Batch size for training')
+    parser.add_argument('--batch_size_for_accumulate', type=int, default=16, help='Batch size to use when computing Hessian eigenspace for accumulation')
+    parser.add_argument('--accumulate_mode', type=str, default='accumulate', choices=['accumulate', 'union'], help='Mode for accumulating Hessian eigenspaces ("accumulate" or "union")')
+    parser.add_argument('--merge_mode', type=str, default='union', choices=['accumulate', 'union'], help='Mode for merging Hessian eigenspaces ("accumulate" or "union")')
+
+
+
 
 @dataclass
-class Config:
+class NostalgiaConfig:
     mode: str = "nostalgia"
     seed: int = 42
     dataset_dir: str = "~/data"
@@ -50,7 +88,7 @@ class Config:
 
 
 class NostalgiaExperiment:
-    def __init__(self, config: Config):
+    def __init__(self, config: NostalgiaConfig):
         self.config = config
         self.transform = transforms.Compose([
             transforms.Resize(224),
@@ -338,4 +376,13 @@ class NostalgiaExperiment:
                 )
 
             self.finished_datasets.append(task_name)
+
+
+
+
+if __name__ == "__main__":
+    args = get_args()
+    config = NostalgiaConfig(**vars(args))
+    experiment = NostalgiaExperiment(config)
+    experiment.train()
 
