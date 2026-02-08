@@ -318,6 +318,12 @@ class NostalgiaExperiment:
         return Q, Lambda
 
     def train(self):
+        # Initial version is only for experimentation
+        # TODO: Create separate code for other modes
+        torch.backends.cuda.enable_flash_sdp(False)
+        torch.backends.cuda.enable_math_sdp(True)
+        torch.backends.cuda.enable_mem_efficient_sdp(False)
+
         Q_prev, Lambda_prev = None, None
         for task_name in self.order_of_tasks:
             self.train_for_dataset(
