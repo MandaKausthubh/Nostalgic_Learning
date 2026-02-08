@@ -540,6 +540,7 @@ class NostalgiaExperiment:
         torch.backends.cuda.enable_flash_sdp(False)
         torch.backends.cuda.enable_math_sdp(True)
         torch.backends.cuda.enable_mem_efficient_sdp(False)
+        self.imageClassifier.set_active_task(task_name)
         Q_new, Lambda_new = None, None
         for _ in range(self.config.iterations_of_accumulation):
             Q_task, Lambda_task = compute_Q_for_task(
