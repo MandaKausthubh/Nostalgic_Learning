@@ -44,7 +44,6 @@ class NostalgiaOptimizer(Optimizer):
         self.param_numels = [p.numel() for p in self.projection_params]
         self.num_params = sum(self.param_numels)
         self.k_max: Optional[int] = None
-        self.manual_weight_decay: float = 1e-4
 
         # New list of hessian eigenvectors and eigenvalues
         # self.nostalgia_Q: List[torch.Tensor] = []
