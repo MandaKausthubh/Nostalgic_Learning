@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import datetime
+from itertools import islice
 from typing import Optional
 
 import torch
@@ -46,8 +47,11 @@ def get_args():
     parser.add_argument('--num_workers', type=int, default=4, help='Number of worker processes for data loading')
     parser.add_argument('--batch_size', type=int, default=512, help='Batch size for training')
     parser.add_argument('--batch_size_for_accumulate', type=int, default=16, help='Batch size to use when computing Hessian eigenspace for accumulation')
-    parser.add_argument('--accumulate_mode', type=str, default='accumulate', choices=['accumulate', 'union'], help='Mode for accumulating Hessian eigenspaces ("accumulate" or "union")')
-    parser.add_argument('--merge_mode', type=str, default='union', choices=['accumulate', 'union'], help='Mode for merging Hessian eigenspaces ("accumulate" or "union")')
+    parser.add_argument('--accumulate_mode', type=str, default='accumulate', choices=['accumulate', 'union'],
+                        help='Mode for accumulating Hessian eigenspaces ("accumulate" or "union")')
+    parser.add_argument('--merge_mode', type=str, default='union', choices=['accumulate', 'union'],
+                        help='Mode for merging Hessian eigenspaces ("accumulate" or "union")')
+    parser.add_argument('--dev', type=str2bool, default=False, help='Whether to run in development mode with smaller datasets')
 
 
 
@@ -57,6 +61,7 @@ class NostalgiaConfig:
     mode: str = "nostalgia"
     seed: int = 42
     dataset_dir: str = "~/data"
+    dev: bool = False
 
     # Model specifications
     device: str = "cuda"
@@ -104,6 +109,7 @@ class NostalgiaExperiment:
         self.using_nostalgia = (self.config.mode == "nostalgia")
         self.writter = SummaryWriter(log_dir=self.config.log_dir)
         self.global_step = 0
+        self.dev_batch_count = 20
 
         self.setup_model()
         self.prepare_data()
@@ -182,6 +188,7 @@ class NostalgiaExperiment:
         print(f"Training task head for {task_name}...")
         for epoch in range(epochs):
             step = 0
+            train_loader = islice(train_loader, self.dev_batch_count) if self.config.dev else train_loader
             progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
             for inputs, targets in progress_bar:
                 inputs, targets = inputs.to(self.model.device), targets.to(self.model.device)
@@ -255,6 +262,7 @@ class NostalgiaExperiment:
 
         for epoch in range(self.config.num_epochs):
             step = 0
+            train_loader = islice(train_loader, self.dev_batch_count) if self.config.dev else train_loader
             progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{self.config.num_epochs}")
             for inputs, targets in progress_bar:
                 inputs, targets = inputs.to(self.model.device), targets.to(self.model.device)
