@@ -53,6 +53,8 @@ def get_args():
                         help='Mode for merging Hessian eigenspaces ("accumulate" or "union")')
     parser.add_argument('--dev', type=str2bool, default=False, help='Whether to run in development mode with smaller datasets')
 
+    return parser.parse_args()
+
 
 
 
@@ -390,7 +392,31 @@ class NostalgiaExperiment:
 
 if __name__ == "__main__":
     args = get_args()
-    config = NostalgiaConfig(**vars(args))
+    config = NostalgiaConfig(
+        mode="nostalgia",
+        seed=args.seed,
+        dataset_dir=args.root_dir,
+        device=args.device,
+        lora_rank=args.lora_rank,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        optimizer=args.optimizer,
+        hessian_dim=args.hessian_dim,
+        learning_rate=args.learning_rate,
+        downstream_learning_rate=args.downstream_learning_rate,
+        log_deltas=args.log_deltas,
+        use_scaling=args.use_scaling,
+        num_epochs=args.num_epochs,
+        validate_every=args.validate_every,
+        hessian_average_epochs=args.hessian_average_epochs,
+        num_warmup_epochs=args.num_warmup_epochs,
+        num_workers=args.num_workers,
+        batch_size=args.batch_size,
+        batch_size_for_accumulate=args.batch_size_for_accumulate,
+        accumulate_mode=args.accumulate_mode,
+        merge_mode=args.merge_mode,
+        dev=args.dev
+    )
     experiment = NostalgiaExperiment(config)
     experiment.train()
 
