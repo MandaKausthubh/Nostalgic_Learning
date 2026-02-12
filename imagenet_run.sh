@@ -11,3 +11,4 @@ python -m vision_experiments/imagenet_run \
     --num_epochs 1 \ 
     --validate_every 150 \ 
     --hessian_average_epochs 5 \
+    --dev True

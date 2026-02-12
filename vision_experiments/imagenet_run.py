@@ -28,7 +28,7 @@ def str2bool(v):
 
 def get_args():
     parser = argparse.ArgumentParser(description="Nostalgia Experiment Configuration")
-    parser.add_argument('--root_dir', type=str, default='~/data', help='Root directory for datasets')
+    parser.add_argument('--dataset_dir', type=str, default='~/data', help='Root directory for datasets')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     parser.add_argument('--device', type=str, default='cuda', help='Device to use for training (e.g., "cuda" or "cpu")')
     parser.add_argument('--lora_rank', type=int, default=16, help='Rank for LoRA adaptation')
