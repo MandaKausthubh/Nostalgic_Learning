@@ -395,7 +395,7 @@ if __name__ == "__main__":
     config = NostalgiaConfig(
         mode="nostalgia",
         seed=args.seed,
-        dataset_dir=args.root_dir,
+        dataset_dir=args.dataset_dir,
         device=args.device,
         lora_rank=args.lora_rank,
         lora_alpha=args.lora_alpha,
