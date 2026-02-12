@@ -6,7 +6,7 @@ from typing import Optional
 import torch
 from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
-from tqdm.gui import tqdm
+from tqdm import tqdm
 
 from models.vit32 import ImageClassifierViT
 from datasets import get_imagenet_split
@@ -54,7 +54,6 @@ def get_args():
     parser.add_argument('--dev', type=str2bool, default=False, help='Whether to run in development mode with smaller datasets')
 
     return parser.parse_args()
-
 
 
 
