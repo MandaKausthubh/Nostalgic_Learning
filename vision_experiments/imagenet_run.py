@@ -134,17 +134,17 @@ class NostalgiaExperiment:
 
     def prepare_data(self):
         dataset_splits = get_imagenet_split(
-            self.config.dataset_dir,
-            self.transform,
-            self.config.batch_size,
-            self.config.num_workers
+            location=self.config.dataset_dir,
+            preprocess=self.transform,
+            batch_size=self.config.batch_size,
+            num_workers=self.config.num_workers
         )
 
         datasets_splits_for_accumulate = get_imagenet_split(
-            self.config.dataset_dir,
-            self.transform,
-            self.config.batch_size,
-            self.config.num_workers
+            location=self.config.dataset_dir,
+            preprocess=self.transform,
+            batch_size=self.config.batch_size,
+            num_workers=self.config.num_workers
         )
 
         self.datasets = {
