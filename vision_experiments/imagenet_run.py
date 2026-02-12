@@ -190,7 +190,7 @@ class NostalgiaExperiment:
         for epoch in range(epochs):
             step = 0
             train_loader = islice(train_loader, self.dev_batch_count) if self.config.dev else train_loader
-            progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}")
+            progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}", ncols=80)
             for inputs, targets in progress_bar:
                 inputs, targets = inputs.to(self.model.device), targets.to(self.model.device)
                 inputs = self.model.preprocess_inputs(inputs)  # type: ignore
@@ -221,7 +221,7 @@ class NostalgiaExperiment:
         total = 0
 
         with torch.no_grad():
-            for inputs, targets in tqdm(test_loader, desc=f"Validating {task_name}"):
+            for inputs, targets in tqdm(test_loader, desc=f"Validating {task_name}", ncols=80):
                 inputs, targets = inputs.to(self.model.device), targets.to(self.model.device)
                 inputs = self.model.preprocess_inputs(inputs)  # type: ignore
                 features = self.model.backbone(inputs)
@@ -264,7 +264,7 @@ class NostalgiaExperiment:
         for epoch in range(self.config.num_epochs):
             step = 0
             train_loader = islice(train_loader, self.dev_batch_count) if self.config.dev else train_loader
-            progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{self.config.num_epochs}")
+            progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{self.config.num_epochs}", ncols=80)
             for inputs, targets in progress_bar:
                 inputs, targets = inputs.to(self.model.device), targets.to(self.model.device)
                 inputs = self.model.preprocess_inputs(inputs)  # type: ignore
