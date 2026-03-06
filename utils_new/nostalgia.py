@@ -22,7 +22,7 @@ class NostalgiaOptimizer(Optimizer):
         log_every: int = 50,
         weight_decay: float = 1e-4,
     ):
-        super().__init__(params, {})  # Dummy call to satisfy Optimizer base class
+        super().__init__([], {})  # Dummy call to satisfy Optimizer base class
         # Important: we do NOT pass params to super(); base_optimizer owns them
         self.base_optimizer = base_optimizer
 
