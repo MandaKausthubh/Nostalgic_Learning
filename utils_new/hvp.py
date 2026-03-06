@@ -65,24 +65,34 @@ class HessianVectorProduct:
         grads = torch.autograd.grad(
             loss,
             self.params,
+            grad_outputs=torch.ones_like(loss),   # TESTING THIS
             create_graph=True,
             retain_graph=True,
         )
 
 
         # Inner product <grad, v>
-        grad_dot_v = sum(
-            (g.view(-1) * v.view(-1)).sum()
-            for g, v in zip(grads, v_structured)
-        )
+        # grad_dot_v = sum(
+        #    (g.view(-1) * v.view(-1)).sum()
+        #    for g, v in zip(grads, v_structured)
+        # )
+
+        # This is added initial testing
+        grad_dot_v = 0
+        for g, v in zip(grads, v_structured):
+            if g is not None:
+                grad_dot_v += (g * v).sum()
 
         # Second gradient (HVP)
         hvp = torch.autograd.grad(
             grad_dot_v,  #type: ignore
             self.params,
             retain_graph=False,
+            allow_unused=True,   # Added intial testing
         )
 
         # Flatten output
-        hvp_flat = torch.cat([h.contiguous().view(-1) for h in hvp])
+        # hvp_flat = torch.cat([h.contiguous().view(-1) for h in hvp])
+        hvp_flat = torch.cat([h.view(-1) if h is not None else torch.zeros_like(v.view(-1))
+                          for h, v in zip(hvp_tuple, v_structured)])
         return hvp_flat.detach()
